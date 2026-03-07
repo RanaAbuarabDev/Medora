@@ -1,5 +1,6 @@
 <?php
 
+use Laravel\Socialite\Facades\Socialite;
 use Illuminate\Support\Facades\Route;
 use App\Http\Controllers\AuthController;
 use App\Http\Controllers\AdminController;
@@ -25,6 +26,17 @@ Route::post(
     [AuthController::class, 'verifyRegistrationOtp']
 );
 
+
+Route::get('/auth/google/redirect', function () {
+    return Socialite::driver('google')->redirect();
+});
+
+Route::get('/auth/google/callback', function () {
+    $user = Socialite::driver('google')->user();
+    
+    
+    dd($user); 
+});
 Route::middleware('auth:sanctum')->group(function () {
 
     // Auth

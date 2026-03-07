@@ -39,10 +39,11 @@ class AuthService
             'name' => $data['name'],
             'email' => $data['email'],
             'password' => bcrypt($data['password']),
-            'role' => 'patient',
+            
             'email_verified_at' => null
         ]);
 
+        $user->assignRole('patient');
         // OTP فقط للمرضى
         $this->otpService->send($user->email, 'registration');
     }
@@ -55,8 +56,9 @@ class AuthService
                 'name'     => $data['name'],
                 'email'    => $data['email'],
                 'password' => Hash::make($data['password']),
-                'role'     => 'lab_manager',
             ]);
+
+            $user->assignRole('lab_manager');
 
             return [
                 'user'  => $user,
@@ -73,9 +75,11 @@ class AuthService
                 'name'     => $data['name'],
                 'email'    => $data['email'],
                 'password' => Hash::make($data['password']),
-                'role'     => 'lab_assistant',
+                'lab_id'   => $data['lab_id'],
             ]);
 
+            $user->assignRole('lab_assistant');
+            
             return [
                 'user'  => $user,
                 'token' => $user->createToken('api-token')->plainTextToken,
@@ -91,8 +95,10 @@ class AuthService
                 'name'     => $data['name'],
                 'email'    => $data['email'],
                 'password' => Hash::make($data['password']),
-                'role'     => 'receptionist',
+                
             ]);
+
+            $user->assignRole('receptionist');
 
             return [
                 'user'  => $user,
