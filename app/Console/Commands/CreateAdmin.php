@@ -32,7 +32,7 @@ class CreateAdmin extends Command
             return Command::FAILURE;
         }
 
-        User::create([
+        $user = User::create([
             'name' => $name,
             'email' => $email,
             'password' => Hash::make($password), 
@@ -40,6 +40,7 @@ class CreateAdmin extends Command
             'lab_id'=> null,
         ]);
 
+        $user->assignRole(\Spatie\Permission\Models\Role::findByName('admin', 'api'));
         $this->info('Admin created successfully.');
         return Command::SUCCESS;
     }

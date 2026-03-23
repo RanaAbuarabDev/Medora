@@ -27,6 +27,7 @@ class User extends Authenticatable
         'role',
         'lab_id'
     ];
+    protected $guard_name = 'api';
 
     /**
      * The attributes that should be hidden for serialization.

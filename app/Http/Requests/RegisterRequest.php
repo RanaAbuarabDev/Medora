@@ -33,8 +33,8 @@ class RegisterRequest extends FormRequest
                     'email',
                     Rule::unique('users', 'email')
                 ],
-            'password'=>['required','min:10','string',
-                Password::min(10)->letters()->symbols()->numbers()
+            'password'=>['required','min:8','string',
+                Password::min(8)->letters()->symbols()->numbers()
              ],
         ];
     }

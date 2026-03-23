@@ -24,4 +24,12 @@ class Laboratory extends Model
     { 
         return $this->hasMany(User::class, 'lab_id')->role(['receptionist', 'lab_assistant']); 
     }
+
+
+    public function masterTests()
+    {
+        return $this->belongsToMany(MasterTest::class, 'lab_tests', 'lab_id', 'master_test_id')
+                    ->withPivot('price', 'is_available')
+                    ->withTimestamps();
+    }
 }

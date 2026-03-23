@@ -3,8 +3,7 @@
 
 namespace App\Services;
 
-
-
+use App\Models\Laboratory;
 use App\Models\User;
 use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Facades\DB;
@@ -48,25 +47,33 @@ class AuthService
         $this->otpService->send($user->email, 'registration');
     }
 
-    public function addLabManager(array $data): array
+    public function setupNewLab(array $data)
     {
         return DB::transaction(function () use ($data) {
-
-            $user = User::create([
-                'name'     => $data['name'],
-                'email'    => $data['email'],
-                'password' => Hash::make($data['password']),
+            // 1. إنشاء المخبر
+            $lab = Laboratory::create([
+                'name' => $data['lab_name'],
+                'address' => $data['address'],
+                'is_active' => true, // أو false بانتظار تفعيل المنصة
             ]);
 
-            $user->assignRole('lab_manager');
+            // 2. إنشاء المدير
+            $manager = User::create([
+                'name' => $data['manager_name'],
+                'email' => $data['manager_email'],
+                'password' => Hash::make($data['manager_password']),
+                'lab_id' => $lab->id, // ربط المدير بمخبره
+            ]);
+
+            // 3. منح الدور (Spatie)
+            $manager->assignRole('lab_manager');
 
             return [
-                'user'  => $user,
-                'token' => $user->createToken('api-token')->plainTextToken,
+                'lab' => $lab,
+                'manager' => $manager
             ];
         });
     }
-
     public function addLabAssistant(array $data): array
     {
         return DB::transaction(function () use ($data) {
@@ -75,7 +82,7 @@ class AuthService
                 'name'     => $data['name'],
                 'email'    => $data['email'],
                 'password' => Hash::make($data['password']),
-                'lab_id'   => $data['lab_id'],
+                'lab_id'   => auth()->user()->lab_id,
             ]);
 
             $user->assignRole('lab_assistant');
@@ -95,7 +102,7 @@ class AuthService
                 'name'     => $data['name'],
                 'email'    => $data['email'],
                 'password' => Hash::make($data['password']),
-                
+                'lab_id'   => auth()->user()->lab_id,
             ]);
 
             $user->assignRole('receptionist');

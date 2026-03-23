@@ -4,7 +4,10 @@ use Laravel\Socialite\Facades\Socialite;
 use Illuminate\Support\Facades\Route;
 use App\Http\Controllers\AuthController;
 use App\Http\Controllers\AdminController;
+use App\Http\Controllers\MasterTestController;
+use App\Http\Controllers\CategoryController;
 use App\Http\Controllers\LabManagerController;
+use App\Http\Controllers\LabTestController;
 
 /*
 |--------------------------------------------------------------------------
@@ -27,16 +30,10 @@ Route::post(
 );
 
 
-Route::get('/auth/google/redirect', function () {
-    return Socialite::driver('google')->redirect();
-});
+Route::post('forgot-password', [AuthController::class, 'forgotPassword']);
+Route::post('verify-otp', [AuthController::class, 'verifyResetOtp']);
+Route::post('reset-password', [AuthController::class, 'resetPassword']);
 
-Route::get('/auth/google/callback', function () {
-    $user = Socialite::driver('google')->user();
-    
-    
-    dd($user); 
-});
 Route::middleware('auth:sanctum')->group(function () {
 
     // Auth
@@ -62,12 +59,33 @@ Route::middleware('auth:sanctum')->group(function () {
         Route::post('/receptionists', [LabManagerController::class, 'createReceptionist']);
     });
 
-    /*
-    |--------------------------------------------------------------------------
-    | Shared Routes (All Auth Users)
-    |--------------------------------------------------------------------------
-    */
-    // Route::get('/me', function () {
-    //     return auth()->user();
-    // });
+
+    Route::middleware(['auth:sanctum', 'role:admin'])->group(function () {
+        Route::post('/admin/register-lab', [AdminController::class, 'registerLabWithManager']);
+    });
+    
+
+    Route::middleware(['auth:sanctum', 'role:admin'])->group(function () {
+        Route::apiResource('admin/categories', CategoryController::class);
+    });
+
+    
+    Route::get('categories', [CategoryController::class, 'index']);
+    Route::get('categories/{id}', [CategoryController::class, 'show']);
+
+
+    Route::middleware(['auth:sanctum', 'role:admin'])->group(function () {
+        Route::apiResource('admin/master-tests', MasterTestController::class);
+    });
+
+    Route::middleware(['auth:sanctum'])->group(function(){
+        Route::get('get-test-category/{id}',[MasterTestController::class,'getByCategory']);
+    });
+
+
+    Route::middleware(['auth:sanctum','role:lab_manager'])->group(function () {
+       
+        Route::get('lab/my-tests', [LabTestController::class, 'index']);
+        Route::post('lab/add-test', [LabTestController::class, 'store']);
+    });
 });

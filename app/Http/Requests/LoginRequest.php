@@ -28,7 +28,7 @@ class LoginRequest extends FormRequest
         return [
             'email'=>'required|email|max:60',
             'password'=>['required','min:10','string',
-                Password::min(10)->letters()->symbols()->numbers()
+                Password::min(10)->letters()->numbers()
              ],
         ];
     }

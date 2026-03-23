@@ -20,16 +20,24 @@ class AdminController extends Controller
 
 
 
-    public function createLabManager(RegisterRequest $request){
-        
-        $this->AuthService->addLabManager(
-            $request->validated()
-        );
+   public function registerLabWithManager(Request $request) 
+{
+    // 1. الفاليديشن (يفضل عمل Request خاص لهذا الأمر)
+    $data = $request->validate([
+        'lab_name' => 'required|string|max:255',
+        'address'  => 'required|string',
+        'manager_name'  => 'required|string',
+        'manager_email' => 'required|email|unique:users,email',
+        'manager_password' => 'required|min:8',
+    ]);
 
-        return ApiResponseService::success(
-            [],
-            'The opertation succeeded',
-            201
-        );
-    }
+    // 2. استدعاء الخدمة لتنفيذ العملية (Atomic Operation)
+    $result = $this->AuthService->setupNewLab($data);
+
+    return ApiResponseService::success(
+        $result,
+        'تم إنشاء المخبر وتعيين المدير بنجاح',
+        201
+    );
+}
 }

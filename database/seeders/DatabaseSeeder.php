@@ -3,7 +3,6 @@
 namespace Database\Seeders;
 
 use App\Models\User;
-// use Illuminate\Database\Console\Seeds\WithoutModelEvents;
 use Illuminate\Database\Seeder;
 
 class DatabaseSeeder extends Seeder
@@ -13,11 +12,20 @@ class DatabaseSeeder extends Seeder
      */
     public function run(): void
     {
-        // User::factory(10)->create();
-
-        User::factory()->create([
-            'name' => 'Test User',
-            'email' => 'test@example.com',
+        // استدعاء ملف الأدوار والصلاحيات أولاً (ترتيب ضروري)
+        $this->call([
+            RolesAndPermissionsSeeder::class,
+            TestCategorySeeder::class,
         ]);
+
+        // الآن يمكنك إنشاء مستخدم وتجربة إعطاؤه دوراً فوراً إذا أردتِ
+        $admin = User::factory()->create([
+            'name' => 'Rana Admin',
+            'email' => 'admin@medora.com',
+            'password' => bcrypt('password1234@'),
+        ]);
+
+        // إعطاء الدور للمستخدم التجريبي
+        $admin->assignRole('admin');
     }
 }
