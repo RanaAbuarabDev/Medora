@@ -65,9 +65,9 @@ Route::middleware('auth:sanctum')->group(function () {
     });
     
 
-    Route::middleware(['auth:sanctum', 'role:admin'])->group(function () {
-        Route::apiResource('admin/categories', CategoryController::class);
-    });
+    // Route::middleware(['auth:sanctum', 'role:admin'])->group(function () {
+    //     Route::apiResource('admin/categories', CategoryController::class);
+    // });
 
     
     Route::get('categories', [CategoryController::class, 'index']);
@@ -82,6 +82,7 @@ Route::middleware('auth:sanctum')->group(function () {
         Route::get('get-test-category/{id}',[MasterTestController::class,'getByCategory']);
     });
 
+    
 
     Route::middleware(['auth:sanctum','role:lab_manager'])->group(function () {
        
