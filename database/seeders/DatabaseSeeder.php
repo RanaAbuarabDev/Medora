@@ -20,7 +20,7 @@ class DatabaseSeeder extends Seeder
         ]);
 
         
-        $admin = User::factory()->create([
+        $admin = User::factory()->firstOrCreate([
             'name' => 'Rana Admin',
             'email' => 'admin@medora.com',
             'password' => bcrypt('password1234@'),
