@@ -34,6 +34,12 @@ Route::post('forgot-password', [AuthController::class, 'forgotPassword']);
 Route::post('verify-otp', [AuthController::class, 'verifyResetOtp']);
 Route::post('reset-password', [AuthController::class, 'resetPassword']);
 
+
+
+Route::get('categories', [CategoryController::class, 'index']);
+Route::get('categories/{id}', [CategoryController::class, 'show']);
+
+
 Route::middleware('auth:sanctum')->group(function () {
 
     // Auth
@@ -70,8 +76,8 @@ Route::middleware('auth:sanctum')->group(function () {
     // });
 
     
-    Route::get('categories', [CategoryController::class, 'index']);
-    Route::get('categories/{id}', [CategoryController::class, 'show']);
+    // Route::get('categories', [CategoryController::class, 'index']);
+    // Route::get('categories/{id}', [CategoryController::class, 'show']);
 
 
     Route::middleware(['auth:sanctum', 'role:admin'])->group(function () {
