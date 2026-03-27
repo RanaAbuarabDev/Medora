@@ -13,18 +13,15 @@ return Application::configure(basePath: dirname(__DIR__))
         api: __DIR__.'/../routes/api.php',
         commands: __DIR__.'/../routes/console.php',
         health: '/up',
-        then: function () {
-            \Illuminate\Support\Facades\RateLimiter::for('api', function (Request $request) {
-                return Limit::perMinute(60)->by(
-                    optional($request->user())->id ?: $request->ip()
-                );
-            });
-        }
     )
     ->withMiddleware(function (Middleware $middleware) {
+        // Rate Limiter
+        \Illuminate\Support\Facades\RateLimiter::for('api', function (Request $request) {
+            return Limit::perMinute(60)->by(
+                optional($request->user())->id ?: $request->ip()
+            );
+        });
 
-        
-        
         $middleware->alias([
             'role' => \Spatie\Permission\Middleware\RoleMiddleware::class,
             'permission' => \Spatie\Permission\Middleware\PermissionMiddleware::class,
