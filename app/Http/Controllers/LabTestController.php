@@ -50,6 +50,7 @@ class LabTestController extends Controller
 
     public function destroy($masterTestId)
     {
+        /** @var \App\Models\User $user */
         $user = auth()->user();
         $labId = $user->laboratory_id;
 

@@ -14,7 +14,9 @@ class CategoryController extends Controller
     
     public function index()
     {
-        $categories = TestCategory::all();
+      
+        $categories = TestCategory::withCount('masterTests')->get();
+
         return ApiResponseService::success($categories, 'Categories retrieved successfully');
     }
 

@@ -3,7 +3,6 @@
 use Illuminate\Foundation\Application;
 use Illuminate\Foundation\Configuration\Exceptions;
 use Illuminate\Foundation\Configuration\Middleware;
-use Illuminate\Cache\RateLimiting\Limit;
 use Illuminate\Http\Request;
 use Illuminate\Routing\Middleware\SubstituteBindings;
 
@@ -15,12 +14,8 @@ return Application::configure(basePath: dirname(__DIR__))
         health: '/up',
     )
     ->withMiddleware(function (Middleware $middleware) {
-        // Rate Limiter
-        \Illuminate\Support\Facades\RateLimiter::for('api', function (Request $request) {
-            return Limit::perMinute(60)->by(
-                optional($request->user())->id ?: $request->ip()
-            );
-        });
+
+        // تم حذف كود RateLimiter من هنا لحل المشكلة 🚀
 
         $middleware->alias([
             'role' => \Spatie\Permission\Middleware\RoleMiddleware::class,
@@ -29,6 +24,8 @@ return Application::configure(basePath: dirname(__DIR__))
         ]);
 
         $middleware->group('api', [
+            \App\Http\Middleware\UpdateUserLastSeen::class,
+            \App\Http\Middleware\CheckUserStatus::class,
             'throttle:api',
             SubstituteBindings::class,
         ]);

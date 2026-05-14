@@ -20,6 +20,7 @@ class AuthService
 
     public function login(array $credentials)
     {
+        
         $user = User::where('email', $credentials['email'])->first();
 
         if (!$user || !Hash::check($credentials['password'], $user->password)) {
@@ -28,7 +29,12 @@ class AuthService
 
         return [
             'token' => $user->createToken('api-token')->plainTextToken,
-            'user'  => $user,
+            'user'  => [
+                'id'    => $user->id,
+                'name'  => $user->name,
+                'email' => $user->email,
+                'roles' => $user->getRoleNames(), 
+            ],
         ];
     }
 
@@ -43,29 +49,31 @@ class AuthService
         ]);
 
         $user->assignRole('patient');
-        // OTP فقط للمرضى
+        
         $this->otpService->send($user->email, 'registration');
     }
 
     public function setupNewLab(array $data)
     {
         return DB::transaction(function () use ($data) {
-            // 1. إنشاء المخبر
+            
+            
+            $licenseNumber = $this->generateLicenseNumber();
+
             $lab = Laboratory::create([
                 'name' => $data['lab_name'],
                 'address' => $data['address'],
-                'is_active' => true, // أو false بانتظار تفعيل المنصة
+                'license_number' => $licenseNumber, 
+                'status' => 'pending', 
             ]);
 
-            // 2. إنشاء المدير
             $manager = User::create([
                 'name' => $data['manager_name'],
                 'email' => $data['manager_email'],
                 'password' => Hash::make($data['manager_password']),
-                'lab_id' => $lab->id, // ربط المدير بمخبره
+                'lab_id' => $lab->id, 
             ]);
 
-            // 3. منح الدور (Spatie)
             $manager->assignRole('lab_manager');
 
             return [
@@ -74,6 +82,8 @@ class AuthService
             ];
         });
     }
+
+
     public function addLabAssistant(array $data): array
     {
         return DB::transaction(function () use ($data) {
@@ -112,5 +122,17 @@ class AuthService
                 'token' => $user->createToken('api-token')->plainTextToken,
             ];
         });
+    }
+
+    private function generateLicenseNumber(): string
+    {
+        do {
+            
+            $licenseNumber = 'LAB-' . rand(1000, 9999);
+            
+            
+        } while (Laboratory::where('license_number', $licenseNumber)->exists());
+
+        return $licenseNumber;
     }
 }

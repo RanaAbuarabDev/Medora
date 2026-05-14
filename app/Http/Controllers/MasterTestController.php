@@ -7,7 +7,7 @@ use App\Models\MasterTest;
 use App\Http\Requests\StoreMasterTestRequest;
 use App\Http\Requests\UpdateMasterTestRequest;
 use App\Services\ApiResponseService;
-
+use Illuminate\Http\Request;
 
 class MasterTestController extends Controller
 {
@@ -56,13 +56,36 @@ class MasterTestController extends Controller
     }
 
 
-    public function searchTest($testId)
+    public function searchTest(Request $request, $testId)
     {
         
-        $test = MasterTest::with(['laboratories' => function($query) {
-            $query->where('is_available', true);
+        $sortBy = $request->query('sort_by', 'all'); 
+
+        $test = MasterTest::with(['laboratories' => function($query) use ($sortBy) {
+            $query->where('lab_tests.is_available', true)
+                ->withAvg('ratings', 'rating')
+                ->withCount('ratings')
+                ->select('laboratories.*', 'lab_tests.price', 'lab_tests.estimated_time_hours');
+
+            if ($sortBy === 'cheapest') {
+                $query->orderBy('lab_tests.price', 'asc')->limit(5);
+            } 
+            elseif ($sortBy === 'top_rated') {
+               
+                $query->orderBy(
+                    \App\Models\LabRating::selectRaw('avg(rating)')
+                        ->whereColumn('lab_id', 'laboratories.id'), 
+                    'desc'
+                )->limit(5);
+            }
+            else {
+             
+                $query->latest();
+            }
+
         }])->findOrFail($testId);
 
-        return response()->json($test);
+        // 3. إرجاع النتيجة كـ JSON
+        return ApiResponseService::success($test, 'تم جلب المخابر وترتيبها بنجاح');
     }
 }

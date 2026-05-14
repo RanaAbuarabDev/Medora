@@ -20,13 +20,13 @@ class DatabaseSeeder extends Seeder
         ]);
 
         
-        $admin = User::factory()->firstOrCreate([
-            'name' => 'Rana Admin',
-            'email' => 'admin@medora.com',
-            'password' => bcrypt('password1234@'),
-        ]);
+        // $admin = User::factory()->firstOrCreate([
+        //     'name' => 'Rana Admin',
+        //     'email' => 'admin@medora.com',
+        //     'password' => bcrypt('password1234@'),
+        // ]);
 
         
-        $admin->assignRole('admin');
+        // $admin->assignRole('admin');
     }
 }
