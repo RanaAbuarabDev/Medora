@@ -9,17 +9,23 @@ use Carbon\Carbon;
 class Appointment extends Model
 {
     protected $fillable = [
+  
         'user_id',
         'lab_id',
-        'test_id',
         'appointment_date',
         'start_time',
         'end_time',
         'status',
-        'cancel_reason',
-        'master_test_id',
+        'cancel_reason'
+
+        
     ];
 
+
+    const STATUS_CONFIRMED = 'confirmed';
+    const STATUS_COMPLETED = 'completed';
+    const STATUS_CANCELLED_BY_PATIENT = 'cancelled_by_patient';
+    const STATUS_CANCELLED_BY_LAB = 'cancelled_by_lab';
    
     public function patient() {
         return $this->belongsTo(User::class, 'user_id');
@@ -52,4 +58,21 @@ class Appointment extends Model
     {
         return $this->hasOne(LabRating::class);
     }
+
+
+    // الموعد يملك فاتورة واحدة فقط
+    public function invoice()
+    {
+        return $this->hasOne(Invoice::class);
+    }
+
+    
+    public function labTests()
+    {
+        
+        return $this->belongsToMany(LabTest::class, 'appointment_lab_test', 'appointment_id', 'lab_test_id')
+                    ->withTimestamps(); 
+    }
+
+    
 }

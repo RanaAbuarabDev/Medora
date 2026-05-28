@@ -66,6 +66,7 @@ class User extends Authenticatable
         'lab_id',
         'last_seen_at',
         'status',
+        'phone'
     ];
     protected $guard_name = 'api';
 
@@ -124,6 +125,32 @@ class User extends Authenticatable
     public function lab()
     {
         return $this->belongsTo(Laboratory::class, 'lab_id');
+    }
+
+    public function patientProfile()
+    {
+        return $this->hasOne(PatientProfile::class);
+    }
+
+    
+
+
+    public function employeeProfile() {
+        return $this->hasOne(EmployeeProfile::class);
+    }
+
+    
+    public function laboratories() {
+        return $this->belongsToMany(Laboratory::class, 'laboratory_patient')
+                    ->withPivot('internal_patient_number')
+                    ->withTimestamps();
+    }
+
+
+    public function appointments()
+    {
+        // المستخدم لديه العديد من المواعيد، والعمود المشترك في جدول المواعيد هو user_id
+        return $this->hasMany(Appointment::class, 'user_id');
     }
 
 }

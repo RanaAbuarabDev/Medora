@@ -18,6 +18,8 @@ use App\Http\Controllers\LabRatingController;
 use App\Http\Controllers\LabScheduleController;
 use App\Http\Controllers\LabTestController;
 use App\Http\Controllers\AdminDashboardController;
+use App\Http\Controllers\Reception\ReceptionistDashboardController;
+
 //use App\Http\Controllers\Admin\SettingsController;
 
 /*
@@ -212,6 +214,21 @@ Route::middleware('auth:sanctum')->group(function () {
         Route::post('/payments/{id}/confirm', [PaymentController::class, 'markAsPaid']);
         
     });
+
+
+    Route::middleware('auth:sanctum')->group(function () {
+        Route::get('/receptionist/dashboard', [ReceptionistDashboardController::class, 'index']);
+        Route::patch('/receptionist/invoices/{id}/toggle-payment', [ReceptionistDashboardController::class, 'togglePayment']);
+
+        Route::get('/reception/available-slots', [ReceptionistDashboardController::class, 'getSlots']);
+        Route::post('/reception/book-appointment', [ReceptionistDashboardController::class, 'bookAppointment']);
+        Route::get('/reception/search-patient', [ReceptionistDashboardController::class, 'searchPatient']);
+        Route::get('/reception/appointments', [ReceptionistDashboardController::class, 'manageAppointments']);
+        Route::get('/reception/patient-profile/{id}', [ReceptionistDashboardController::class, 'getPatientProfile']);
+    });
+
+
 });
 
-//16|yPiMI0PfGquuLC0wijLMx5PGqp2BktCjqAkOshIF66850244
+
+

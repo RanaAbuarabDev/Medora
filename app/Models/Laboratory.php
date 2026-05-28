@@ -81,4 +81,16 @@ class Laboratory extends Model
         return $this->subscriptions()->where('status', 'paid')->sum('amount');
     }
 
+    
+    public function employees() {
+        return $this->hasMany(EmployeeProfile::class);
+    }
+
+    
+    public function patients() {
+        return $this->belongsToMany(User::class, 'laboratory_patient')
+                    ->withPivot('internal_patient_number')
+                    ->withTimestamps();
+    }
+
 }

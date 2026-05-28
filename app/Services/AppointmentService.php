@@ -5,7 +5,9 @@ namespace App\Services;
 use App\Models\Appointment;
 use App\Models\Laboratory;
 use App\Models\LabSchedule;
+use App\Models\Invoice;
 use App\Models\User;
+use App\Models\LabTest;
 use Illuminate\Support\Facades\DB;
 use Carbon\Carbon;
 use Exception;
@@ -13,83 +15,79 @@ use Illuminate\Support\Facades\Auth;
 
 class AppointmentService
 {
-    
+    /**
+     * حجز موعد جديد للمريض (نسخة نظيفة ومحسنة الأداء)
+     */
     public function storeAppointment(array $data)
     {
+        $this->ensureTestsAreSelected($data);
+
         return DB::transaction(function () use ($data) {
             $lab = Laboratory::where('id', $data['lab_id'])->lockForUpdate()->firstOrFail();
 
             $this->validateLabAvailability($lab->id, $data['appointment_date'], $data['start_time']);
+            $this->checkLabCapacity($lab->id, $data['appointment_date'], $data['start_time']);
 
-            $assistantsCount = $this->getLabAssistantsCount($lab->id);
+            // 1. إنشاء الموعد
+            $appointment = $this->createNewAppointment($lab, $data);
 
-            $existingAppointmentsCount = Appointment::where('lab_id', $data['lab_id'])
-                ->where('appointment_date', $data['appointment_date'])
-                ->where('start_time', $data['start_time'])
-                ->where('status', 'confirmed') 
-                ->lockForUpdate() 
-                ->count();
+            // 2. ربط التحاليل بالموعد
+            $appointment->labTests()->attach($data['test_ids']);
 
-            if ($existingAppointmentsCount >= $assistantsCount) {
-                throw new Exception('عذراً، هذا الموعد تم حجزه بالكامل للتو من قبل مريض آخر.', 422);
-            }
+            // 3. توليد الفاتورة التلقائية
+            $this->generateInvoiceForAppointment($appointment->id, $data['test_ids']);
 
-            return Appointment::create([
-                'user_id'          => Auth::id(),
-                'lab_id'           => $data['lab_id'],
-                'master_test_id'   => $data['test_id'],
-                'appointment_date' => $data['appointment_date'],
-                'start_time'       => $data['start_time'],
-                'end_time'         => Carbon::parse($data['start_time'])
-                                        ->addMinutes($lab->slot_interval)
-                                        ->format('H:i:s'),
-                'status'           => 'confirmed', 
-            ]);
+            return $appointment->load(['labTests', 'invoice']);
         });
     }
 
     /**
-     * التحقق من توافق الموعد مع جدول دوام المختبر
+     * جلب مواعيد المريض (تصنيف ذكي ومحسّن الأداء)
      */
-    private function validateLabAvailability(int $labId, string $date, string $time)
+    public function getPatientAppointments(int $patientId)
     {
-        $carbonDate = Carbon::parse($date);
-        $dayOfWeek = $carbonDate->dayOfWeek; 
-        $requestedTime = Carbon::parse($time)->format('H:i:s');
+        $appointments = Appointment::with(['lab', 'labTests', 'invoice'])
+            ->where('user_id', $patientId)
+            ->orderBy('appointment_date', 'desc')
+            ->get();
 
-        $schedule = LabSchedule::where('lab_id', $labId)
-            ->where('day_of_week', $dayOfWeek)
-            ->first();
+        // تحسين الأداء: حساب التاريخ الحالي مرة واحدة وتمريره عبر استخدام use
+        $today = Carbon::today()->toDateString();
 
-        if (!$schedule) {
-            throw new Exception('جدول دوام المختبر غير متوفر لهذا اليوم.', 422);
-        }
-
-        if ($schedule->is_day_off) {
-            throw new Exception('المختبر مغلق في هذا اليوم، يرجى اختيار تاريخ آخر.', 422);
-        }
-
-        if ($requestedTime < $schedule->start_time || $requestedTime >= $schedule->end_time) {
-            throw new Exception("المختبر يعمل من {$schedule->start_time} حتى {$schedule->end_time}.", 422);
-        }
+        return [
+            'upcoming' => $appointments->filter(function ($app) use ($today) {
+                return ($app->appointment_date >= $today) 
+                    && $app->status === Appointment::STATUS_CONFIRMED; // استخدام الـ Constant
+            })->values(),
+            
+            'past' => $appointments->filter(function ($app) use ($today) {
+                return ($app->appointment_date < $today) 
+                    || in_array($app->status, [
+                        Appointment::STATUS_CANCELLED_BY_PATIENT, 
+                        Appointment::STATUS_CANCELLED_BY_LAB, 
+                        Appointment::STATUS_COMPLETED
+                    ]);
+            })->values(),
+        ];
     }
 
-    
-     
+    /**
+     * إلغاء الموعد
+     */
     public function cancelAppointment(int $appointmentId, ?string $reason = null)
     {
         return DB::transaction(function () use ($appointmentId, $reason) {
             $appointment = Appointment::where('id', $appointmentId)->lockForUpdate()->firstOrFail();
 
-            
-            if ($appointment->status !== 'confirmed') {
+            if ($appointment->status !== Appointment::STATUS_CONFIRMED) {
                 throw new Exception('لا يمكن إلغاء الموعد لأنه ملغى مسبقاً أو مكتمل.', 422);
             }
 
-            if (Auth::id() === $appointment->user_id) {
-                $appointment->status = 'cancelled_by_patient';
-            } else {
-                $appointment->status = 'cancelled_by_lab';
+            $appointment->status = (Auth::id() === $appointment->user_id)
+                ? Appointment::STATUS_CANCELLED_BY_PATIENT
+                : Appointment::STATUS_CANCELLED_BY_LAB;
+
+            if ($reason && $appointment->status === Appointment::STATUS_CANCELLED_BY_LAB) {
                 $appointment->cancel_reason = $reason;
             }
 
@@ -98,54 +96,24 @@ class AppointmentService
         });
     }
 
-    private function getLabAssistantsCount(int $labId): int
-    {
-        $count = User::where('lab_id', $labId)
-            ->role('lab_assistant')
-            ->count();
-
-        return $count > 0 ? $count : 1;
-    }
-
     /**
-     * جلب مواعيد المريض (تعديل الفلترة)
+     * جلب تفاصيل موعد محدد للمريض
      */
-    public function getPatientAppointments(int $patientId)
-    {
-        $appointments = Appointment::with(['lab', 'test'])
-            ->where('user_id', $patientId)
-            ->orderBy('appointment_date', 'desc')
-            ->get();
-
-        return [
-            'upcoming' => $appointments->filter(function ($app) {
-               
-                return ($app->appointment_date >= now()->format('Y-m-d')) 
-                    && $app->status === 'confirmed';
-            })->values(),
-            
-            'past' => $appointments->filter(function ($app) {
-             
-                return ($app->appointment_date < now()->format('Y-m-d')) 
-                    || in_array($app->status, ['cancelled_by_patient', 'cancelled_by_lab', 'completed']);
-            })->values(),
-        ];
-    }
-
     public function getAppointmentDetails(int $id, int $patientId)
     {
-        return Appointment::with(['lab', 'test'])
+        return Appointment::with(['lab', 'labTests', 'invoice'])
             ->where('user_id', $patientId)
             ->findOrFail($id);
     }
 
-
+    /**
+     * حساب الفترات الزمنية المتاحة للحجز بناءً على طاقة المختبر الاستيعابية
+     */
     public function getAvailableSlots(int $labId, string $date)
     {
         $lab = Laboratory::findOrFail($labId);
         $assistantsCount = $this->getLabAssistantsCount($labId);
         
-      
         $dayOfWeek = Carbon::parse($date)->dayOfWeek;
         $schedule = LabSchedule::where('lab_id', $labId)
             ->where('day_of_week', $dayOfWeek)
@@ -155,17 +123,15 @@ class AppointmentService
             return []; 
         }
 
-        
         $start = Carbon::parse($date . ' ' . $schedule->start_time);
         $end = Carbon::parse($date . ' ' . $schedule->end_time);
         $interval = $lab->slot_interval ?? 30; 
 
         $periods = \Carbon\CarbonPeriod::since($start)->minutes($interval)->until($end->subMinutes($interval));
 
-       
         $appointmentsByTime = Appointment::where('lab_id', $labId)
                 ->where('appointment_date', $date)
-                ->where('status', 'confirmed')
+                ->where('status', Appointment::STATUS_CONFIRMED)
                 ->select('start_time', DB::raw('count(*) as count'))
                 ->groupBy('start_time')
                 ->pluck('count', 'start_time')
@@ -185,5 +151,91 @@ class AppointmentService
         }
 
         return $slots;
+    }
+
+    /*
+    |--------------------------------------------------------------------------
+    | الدوال المساعدة الخاصة (Private Helper Methods) - SRP Principle
+    |--------------------------------------------------------------------------
+    */
+
+    private function ensureTestsAreSelected(array $data): void
+    {
+        if (!isset($data['test_ids']) || !is_array($data['test_ids']) || empty($data['test_ids'])) {
+            throw new Exception('يرجى اختيار تحليل واحد على الألق لإتمام عملية الحجز.', 422);
+        }
+    }
+
+    private function checkLabCapacity(int $labId, string $date, string $time): void
+    {
+        $assistantsCount = $this->getLabAssistantsCount($labId);
+
+        $existingAppointmentsCount = Appointment::where('lab_id', $labId)
+            ->where('appointment_date', $date)
+            ->where('start_time', $time)
+            ->where('status', Appointment::STATUS_CONFIRMED) 
+            ->lockForUpdate() 
+            ->count();
+
+        if ($existingAppointmentsCount >= $assistantsCount) {
+            throw new Exception('عذراً، هذا الموعد تم حجزه بالكامل للتو من قبل مريض آخر.', 422);
+        }
+    }
+
+    private function createNewAppointment(Laboratory $lab, array $data): Appointment
+    {
+        return Appointment::create([
+            'user_id'          => Auth::id(),
+            'lab_id'           => $lab->id,
+            'appointment_date' => $data['appointment_date'],
+            'start_time'       => $data['start_time'],
+            'end_time'         => Carbon::parse($data['start_time'])
+                                    ->addMinutes($lab->slot_interval)
+                                    ->format('H:i:s'),
+            'status'           => Appointment::STATUS_CONFIRMED, 
+        ]);
+    }
+
+    private function generateInvoiceForAppointment(int $appointmentId, array $testIds): void
+    {
+        $totalAmount = LabTest::whereIn('id', $testIds)->sum('price');
+
+        Invoice::create([
+            'appointment_id' => $appointmentId,
+            'total_amount'   => $totalAmount,
+            'amount_paid'    => 0, 
+            'payment_status' => Invoice::STATUS_UNPAID, // استخدام Constant الفاتورة
+        ]);
+    }
+
+    private function validateLabAvailability(int $labId, string $date, string $time): void
+    {
+        $carbonDate = Carbon::parse($date);
+        $requestedTime = Carbon::parse($time)->format('H:i:s');
+
+        $schedule = LabSchedule::where('lab_id', $labId)
+            ->where('day_of_week', $carbonDate->dayOfWeek)
+            ->first();
+
+        if (!$schedule) {
+            throw new Exception('جدول دوام المختبر غير متوفر لهذا اليوم.', 422);
+        }
+
+        if ($schedule->is_day_off) {
+            throw new Exception('المختبر مغلق في هذا اليوم، يرجى اختيار تاريخ آخر.', 422);
+        }
+
+        if ($requestedTime < $schedule->start_time || $requestedTime >= $schedule->end_time) {
+            throw new Exception("المختبر يعمل من {$schedule->start_time} حتى {$schedule->end_time}.", 422);
+        }
+    }
+
+    private function getLabAssistantsCount(int $labId): int
+    {
+        $count = User::where('lab_id', $labId)
+            ->role('lab_assistant')
+            ->count();
+
+        return $count > 0 ? $count : 1;
     }
 }

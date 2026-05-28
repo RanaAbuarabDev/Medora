@@ -15,9 +15,9 @@ class AdminSeeder extends Seeder
     {
         User::updateOrCreate([
             'name' => 'Rana Abu Arab',
-            'email' => 'ranaabuarab2002@gmail.com.com',
+            'email' => 'ranaabuarab2002@gmail.com',
             'password' => bcrypt('Rana1234@'),
-            'role' => 'admin'
+            
         ]);
 
     }
