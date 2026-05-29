@@ -19,6 +19,7 @@ class AppointmentManagementResource extends JsonResource
             'test_tags'        => $this->labTests->pluck('name'), // مصفوفة بأسماء التحاليل لتظهر كـ Badges (فحص دوري، هرمونات)
             'total_amount'     => $this->invoice->total_amount ?? 0,
             'status'           => $this->status, // مكتمل، قيد التحليل، ملغى
+            'can_confirm_attendance' => $this->status === 'pending' && $this->appointment_date === \Carbon\Carbon::today()->toDateString(),
         ];
     }
 }

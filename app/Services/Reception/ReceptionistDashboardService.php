@@ -326,4 +326,24 @@ class ReceptionistDashboardService
             ->findOrFail($patientId);
     }
 
+    /**
+     * تأكيد حضور المريض وتغيير حالة الموعد إلى "في الانتظار"
+     */
+    public function confirmPatientAttendance(int $appointmentId)
+    {
+        $appointment = Appointment::findOrFail($appointmentId);
+
+        // التحقق من أن الحالة الحالية هي pending فقط لزيادة أمان النظام
+        if ($appointment->status !== 'pending') {
+            throw new \Exception('لا يمكن تأكيد حضور مريض تم استقباله أو إلغاء موعده مسبقاً.');
+        }
+
+        // تحديث الحالة
+        $appointment->update([
+            'status' => 'waiting'
+        ]);
+
+        return $appointment;
+    }
+
 }

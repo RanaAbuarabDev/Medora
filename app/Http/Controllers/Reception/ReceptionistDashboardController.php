@@ -147,4 +147,18 @@ class ReceptionistDashboardController extends Controller
             'تم جلب بروفايل المريض الطبي بنجاح'
         );
     }
+
+    /**
+     * Endpoint لتأكيد حضور المريض (تحويل الحالة من pending إلى waiting)
+     */
+    public function confirmAttendance($id)
+    {
+        try {
+            $this->dashboardService->confirmPatientAttendance($id);
+            
+            return ApiResponseService::success(null, 'تم تأكيد حضور المريض بنجاح، وهو الآن في قائمة الانتظار.');
+        } catch (\Exception $e) {
+            return ApiResponseService::error($e->getMessage(), 400);
+        }
+    }
 }

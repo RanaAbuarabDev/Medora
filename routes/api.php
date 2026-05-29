@@ -225,6 +225,7 @@ Route::middleware('auth:sanctum')->group(function () {
         Route::get('/reception/search-patient', [ReceptionistDashboardController::class, 'searchPatient']);
         Route::get('/reception/appointments', [ReceptionistDashboardController::class, 'manageAppointments']);
         Route::get('/reception/patient-profile/{id}', [ReceptionistDashboardController::class, 'getPatientProfile']);
+        Route::patch('/reception/appointments/{id}/confirm-attendance', [ReceptionistDashboardController::class, 'confirmAttendance']);
     });
 
 
