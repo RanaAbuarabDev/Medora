@@ -7,22 +7,26 @@ use Illuminate\Support\Facades\Schema;
 return new class extends Migration
 {
     /**
-     * Run the migrations.
+     * تشغيل الميجريشن لإضافة الفهارس
      */
     public function up(): void
     {
         Schema::table('appointments', function (Blueprint $table) {
-            $table->foreignId('master_test_id')->after('lab_id')->constrained('master_tests')->onDelete('cascade');
+            
+            $table->index('status');
+            $table->index(['appointment_date', 'start_time']);
         });
     }
 
     /**
-     * Reverse the migrations.
+     * التراجع عن الميجريشن (حذف الفهارس)
      */
     public function down(): void
     {
         Schema::table('appointments', function (Blueprint $table) {
-            //
+            // حذف الفهارس عند التراجع
+            $table->dropIndex(['status']);
+            $table->dropIndex(['appointment_date', 'start_time']);
         });
     }
 };

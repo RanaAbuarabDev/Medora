@@ -7,7 +7,7 @@ use App\Models\Laboratory;
 use App\Models\LabSchedule;
 use App\Models\Invoice;
 use App\Models\User;
-use App\Models\LabTest;
+use App\Models\LabTest; 
 use Illuminate\Support\Facades\DB;
 use Carbon\Carbon;
 use Exception;
@@ -16,29 +16,69 @@ use Illuminate\Support\Facades\Auth;
 class AppointmentService
 {
     /**
-     * حجز موعد جديد للمريض (نسخة نظيفة ومحسنة الأداء)
+     * حجز موعد جديد للمريض (النسخة المحمية ضد التلاعب والمتوافقة مع نظام المختبر)
      */
     public function storeAppointment(array $data)
     {
         $this->ensureTestsAreSelected($data);
 
         return DB::transaction(function () use ($data) {
+            
+            $patientId = Auth::id() ?? $data['user_id'] ?? null;
+            if (!$patientId) {
+                throw new Exception('لم يتم التعرف على هوية المستخدم المسؤول عن الحجز.', 401);
+            }
+
+            // ⚠️ حماية الدكتور: منع المريض من حجز أكثر من فترة في نفس اليوم لنفس المختبر
+            $this->validatePatientDailyLimit($patientId, $data['lab_id'], $data['appointment_date']);
+
+            // قفل وقراءة بيانات المختبر
             $lab = Laboratory::where('id', $data['lab_id'])->lockForUpdate()->firstOrFail();
 
+            // التحقق من أوقات وطاقة دوام المختبر الاستيعابية
             $this->validateLabAvailability($lab->id, $data['appointment_date'], $data['start_time']);
             $this->checkLabCapacity($lab->id, $data['appointment_date'], $data['start_time']);
 
-            // 1. إنشاء الموعد
-            $appointment = $this->createNewAppointment($lab, $data);
+            // 1. إنشاء الموعد الأساسي بالحالة الافتراضية الأولى
+            $appointment = $this->createNewAppointment($lab, $data, $patientId);
 
-            // 2. ربط التحاليل بالموعد
-            $appointment->labTests()->attach($data['test_ids']);
+            // 2. تحديث الربط: حشو مصفوفة التحاليل في جدول الربط دفعة واحدة (Eager Sync)
+            $syncData = [];
+            $now = Carbon::now();
+            foreach ($data['test_ids'] as $testId) {
+                $syncData[$testId] = [
+                    'result_value' => null,       
+                    'status'       => 'pending',  
+                    'created_at'   => $now,
+                    'updated_at'   => $now,
+                ];
+            }
+            
+            // ربط التحاليل المتعددة بالـ Pivot
+            $appointment->labTests()->attach($syncData);
 
-            // 3. توليد الفاتورة التلقائية
+            // 3. توليد الفاتورة التلقائية بناءً على مجموع أسعار مصفوفة التحاليل المطلوبة
             $this->generateInvoiceForAppointment($appointment->id, $data['test_ids']);
 
+            // جلب العلاقات دفعة واحدة بكفاءة لإعادتها للفرونت إند
             return $appointment->load(['labTests', 'invoice']);
         });
+    }
+
+    /**
+     * دالة حماية إضافية (توجيهات الدكتور): تمنع المريض من تكرار حجز الفترات بنفس اليوم
+     */
+    private function validatePatientDailyLimit(int $patientId, int $labId, string $date): void
+    {
+        $hasExistingAppointment = Appointment::where('user_id', $patientId)
+            ->where('lab_id', $labId)
+            ->where('appointment_date', $date)
+            ->whereIn('status', ['pending', 'waiting', 'in_progress', Appointment::STATUS_CONFIRMED])
+            ->exists();
+
+        if ($hasExistingAppointment) {
+            throw new Exception('عذراً، لا يمكنك حجز أكثر من موعد في نفس اليوم بداخل هذا المختبر الطبية.', 422);
+        }
     }
 
     /**
@@ -51,13 +91,12 @@ class AppointmentService
             ->orderBy('appointment_date', 'desc')
             ->get();
 
-        // تحسين الأداء: حساب التاريخ الحالي مرة واحدة وتمريره عبر استخدام use
         $today = Carbon::today()->toDateString();
 
         return [
             'upcoming' => $appointments->filter(function ($app) use ($today) {
                 return ($app->appointment_date >= $today) 
-                    && $app->status === Appointment::STATUS_CONFIRMED; // استخدام الـ Constant
+                    && in_array($app->status, ['pending', 'waiting', 'in_progress', Appointment::STATUS_CONFIRMED]);
             })->values(),
             
             'past' => $appointments->filter(function ($app) use ($today) {
@@ -65,7 +104,7 @@ class AppointmentService
                     || in_array($app->status, [
                         Appointment::STATUS_CANCELLED_BY_PATIENT, 
                         Appointment::STATUS_CANCELLED_BY_LAB, 
-                        Appointment::STATUS_COMPLETED
+                        'completed'
                     ]);
             })->values(),
         ];
@@ -79,8 +118,8 @@ class AppointmentService
         return DB::transaction(function () use ($appointmentId, $reason) {
             $appointment = Appointment::where('id', $appointmentId)->lockForUpdate()->firstOrFail();
 
-            if ($appointment->status !== Appointment::STATUS_CONFIRMED) {
-                throw new Exception('لا يمكن إلغاء الموعد لأنه ملغى مسبقاً أو مكتمل.', 422);
+            if (in_array($appointment->status, ['completed', Appointment::STATUS_CANCELLED_BY_PATIENT, Appointment::STATUS_CANCELLED_BY_LAB])) {
+                throw new Exception('لا يمكن إلغاء الموعد لأنه ملغى مسبقاً أو مكتمل المعالجة.', 422);
             }
 
             $appointment->status = (Auth::id() === $appointment->user_id)
@@ -129,9 +168,10 @@ class AppointmentService
 
         $periods = \Carbon\CarbonPeriod::since($start)->minutes($interval)->until($end->subMinutes($interval));
 
+        // حساب عدد المواعيد النشطة المسجلة في كل فترة زمنية
         $appointmentsByTime = Appointment::where('lab_id', $labId)
                 ->where('appointment_date', $date)
-                ->where('status', Appointment::STATUS_CONFIRMED)
+                ->whereIn('status', ['pending', 'waiting', 'in_progress', Appointment::STATUS_CONFIRMED])
                 ->select('start_time', DB::raw('count(*) as count'))
                 ->groupBy('start_time')
                 ->pluck('count', 'start_time')
@@ -162,7 +202,7 @@ class AppointmentService
     private function ensureTestsAreSelected(array $data): void
     {
         if (!isset($data['test_ids']) || !is_array($data['test_ids']) || empty($data['test_ids'])) {
-            throw new Exception('يرجى اختيار تحليل واحد على الألق لإتمام عملية الحجز.', 422);
+            throw new Exception('يرجى اختيار تحليل واحد على الأقل لإتمام عملية الحجز.', 422);
         }
     }
 
@@ -173,7 +213,7 @@ class AppointmentService
         $existingAppointmentsCount = Appointment::where('lab_id', $labId)
             ->where('appointment_date', $date)
             ->where('start_time', $time)
-            ->where('status', Appointment::STATUS_CONFIRMED) 
+            ->whereIn('status', ['pending', 'waiting', 'in_progress', Appointment::STATUS_CONFIRMED]) 
             ->lockForUpdate() 
             ->count();
 
@@ -182,17 +222,19 @@ class AppointmentService
         }
     }
 
-    private function createNewAppointment(Laboratory $lab, array $data): Appointment
+    private function createNewAppointment(Laboratory $lab, array $data, int $patientId): Appointment
     {
         return Appointment::create([
-            'user_id'          => Auth::id(),
+            'user_id'          => $patientId, 
             'lab_id'           => $lab->id,
             'appointment_date' => $data['appointment_date'],
             'start_time'       => $data['start_time'],
             'end_time'         => Carbon::parse($data['start_time'])
                                     ->addMinutes($lab->slot_interval)
                                     ->format('H:i:s'),
-            'status'           => Appointment::STATUS_CONFIRMED, 
+            'status'           => 'pending', 
+            'sample_code'      => 'LAB-' . strtoupper(bin2hex(random_bytes(3))), 
+            'master_test_id'   => $data['test_ids'][0] ?? null, 
         ]);
     }
 
@@ -204,7 +246,7 @@ class AppointmentService
             'appointment_id' => $appointmentId,
             'total_amount'   => $totalAmount,
             'amount_paid'    => 0, 
-            'payment_status' => Invoice::STATUS_UNPAID, // استخدام Constant الفاتورة
+            'payment_status' => Invoice::STATUS_UNPAID, 
         ]);
     }
 

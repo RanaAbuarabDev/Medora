@@ -26,5 +26,20 @@ use Illuminate\Database\Eloquent\Model;
  */
 class LabTest extends Model
 {
-    //
+    public function parameters()
+    {
+        return $this->hasMany(TestParameter::class, 'lab_test_id');
+    }
+
+    // 2. علاقة LabTest مع التحليل العام الأب (BelongsTo)
+    public function masterTest()
+    {
+        return $this->belongsTo(MasterTest::class, 'master_test_id');
+    }
+
+    // 3. علاقة LabTest مع المختبر نفسه (BelongsTo)
+    public function laboratory()
+    {
+        return $this->belongsTo(Laboratory::class, 'lab_id');
+    }
 }

@@ -1,235 +1,167 @@
 <?php
 
+use App\Http\Controllers\Admin\AdminController as AdminAdminController;
 use App\Http\Controllers\Admin\AdminUserController;
 use App\Http\Controllers\Admin\AnalyticsController;
 use App\Http\Controllers\Admin\PaymentController;
 use App\Http\Controllers\Admin\AdminSettingsController;
-use Laravel\Socialite\Facades\Socialite;
 use Illuminate\Support\Facades\Route;
 use App\Http\Controllers\AuthController;
-use App\Http\Controllers\AdminController;
 use App\Http\Controllers\AppointmentController;
 use App\Http\Controllers\MasterTestController;
 use App\Http\Controllers\CategoryController;
 use App\Http\Controllers\LabManagerController;
 use App\Http\Controllers\LaboratoryController;
 use App\Http\Controllers\LabRatingController;
-// use app\Http\Controllers\LabScheduleController;
 use App\Http\Controllers\LabScheduleController;
 use App\Http\Controllers\LabTestController;
 use App\Http\Controllers\AdminDashboardController;
+use App\Http\Controllers\Patient\PatientProfileController;
+use App\Http\Controllers\Patient\PatientNotificationController;
 use App\Http\Controllers\Reception\ReceptionistDashboardController;
-
-//use App\Http\Controllers\Admin\SettingsController;
+use App\Http\Controllers\LabAssistant\LabAssistantDashboardController;
+use App\Http\Controllers\LabAssistant\LabResultController as LabAssistantLabResultController;
 
 /*
 |--------------------------------------------------------------------------
-| Public Routes (No Auth)
+| Public Routes (No Auth Required)
 |--------------------------------------------------------------------------
 */
-
 Route::post('/login', [AuthController::class, 'login']);
 Route::post('/register/patient', [AuthController::class, 'registerPatient']);
-
-/*
-|--------------------------------------------------------------------------
-| Protected Routes (Auth Required)
-|--------------------------------------------------------------------------
-*/
-
-Route::post(
-    '/verify-registration-otp',
-    [AuthController::class, 'verifyRegistrationOtp']
-);
-
-
-Route::post('forgot-password', [AuthController::class, 'forgotPassword']);
-Route::post('verify-otp', [AuthController::class, 'verifyResetOtp']);
-Route::post('reset-password', [AuthController::class, 'resetPassword']);
-
-
+Route::post('/forgot-password', [AuthController::class, 'forgotPassword']);
+Route::post('/verify-otp', [AuthController::class, 'verifyResetOtp']);
+Route::post('/reset-password', [AuthController::class, 'resetPassword']);
 
 Route::get('categories', [CategoryController::class, 'index']);
 Route::get('categories/{id}', [CategoryController::class, 'show']);
 
 
 
-    Route::middleware('auth:sanctum')->group(function () {
-        
-       
-        Route::get('/appointments', [AppointmentController::class, 'index']);
-        
-        Route::get('/appointments/{id}', [AppointmentController::class, 'show']);
-        
-        Route::middleware('role:patient')->group(function () {
-            Route::post('/appointments', [AppointmentController::class, 'store']);
-        });
-        
-        
-        Route::post('/appointments/{id}/cancel', [AppointmentController::class, 'cancel']);
-    });
-
+Route::post('/verify-registration-otp', [AuthController::class, 'verifyRegistrationOtp']);
+Route::post('/logout', [AuthController::class, 'logout']);
+/*
+|--------------------------------------------------------------------------
+| Protected Routes (Auth Required Via Sanctum)
+|--------------------------------------------------------------------------
+*/
 Route::middleware('auth:sanctum')->group(function () {
 
-    // Auth
-    Route::post('/logout', [AuthController::class, 'logout']);
+    // Auth Actions
+    
     Route::post('/refresh', [AuthController::class, 'refresh']);
+
+    // Global Appointments Actions
+    Route::get('/appointments', [AppointmentController::class, 'index']);
+    Route::get('/appointments/{id}', [AppointmentController::class, 'show']);
+    Route::post('/appointments/{id}/cancel', [AppointmentController::class, 'cancel']);
+
+    // Patient Specific Actions
+    Route::middleware('role:patient')->group(function () {
+        Route::post('/appointments', [AppointmentController::class, 'store']);
+    });
+
+    Route::get('patient/notifications', [PatientNotificationController::class, 'index']);
+    
+    // تحديث الإشعار ليصبح مقروءاً عند النقر
+    Route::post('patient/notifications/{id}/read', [PatientNotificationController::class, 'markAsRead']);
+    // جلب وعرض بيانات الحساب والملاحظات الطبية للمريض
+    Route::get('patient/profile', [PatientProfileController::class, 'show']);
+    Route::post('patient/profile/update', [PatientProfileController::class, 'update']);
+
+
+    // Medical Ratings Actions
+    Route::get('/lab-ratings', [LabRatingController::class, 'index']); 
+    Route::post('/lab-ratings', [LabRatingController::class, 'store']);
+    Route::get('/laboratories/{id}/ratings', [LabRatingController::class, 'getLabRatings']);
+
+    // Laboratories Core Search & Slots
+    Route::get('/tests/{testId}/search', [MasterTestController::class, 'searchTest']);
+    Route::get('/laboratories/{labId}/slots', [LaboratoryController::class, 'getSlots']);
+    Route::get('get-test-category/{id}', [MasterTestController::class, 'getByCategory']);
 
     /*
     |--------------------------------------------------------------------------
-    | Admin Routes
+    | Platform Admin Specific Routes
     |--------------------------------------------------------------------------
     */
     Route::middleware('role:admin')->group(function () {
-        Route::post('/lab-managers', [AdminController::class, 'createLabManager']);
+        Route::post('/lab-managers', [AdminAdminController::class, 'createLabManager']);
+        Route::post('/admin/register-lab', [AdminAdminController::class, 'registerLabWithManager']);
+        Route::apiResource('admin/master-tests', MasterTestController::class);
+        
+        Route::prefix('admin')->group(function () {
+            Route::get('/statistics', [AdminDashboardController::class, 'getStatistics']);
+            Route::get('/labs', [AdminDashboardController::class, 'getLabsList']);
+            Route::get('/users', [AdminUserController::class, 'index']);
+            Route::post('/users/{id}/reset-password', [AdminUserController::class, 'resetPassword']);
+            Route::put('/users/{id}/status', [AdminUserController::class, 'updateStatus']);
+            Route::get('/payments', [PaymentController::class, 'index']);
+            Route::get('/analytics', [AnalyticsController::class, 'index']);
+            Route::get('settings/', [AdminSettingsController::class, 'index']);
+            Route::post('settings/update', [AdminSettingsController::class, 'update']);
+            Route::post('/payments/send-reminders', [PaymentController::class, 'sendReminders']);
+            Route::post('/payments/{id}/confirm', [PaymentController::class, 'markAsPaid']);
+            Route::delete('/laboratories/{id}', [AdminAdminController::class, 'destroyLab']);
+
+            Route::prefix('labs')->group(function () {
+                Route::post('/', [LaboratoryController::class, 'store']);
+                // تمت إزالة السطور المكررة لـ approved / reject لعدم تشتيت النظام
+                Route::get('/{id}', [LaboratoryController::class, 'show']);
+                Route::put('/{id}/approve', [LaboratoryController::class, 'approve']);
+                Route::put('/{id}/reject', [LaboratoryController::class, 'reject']);
+                Route::put('/{id}/block', [LaboratoryController::class, 'block']);
+                Route::get('/{id}/slots', [LaboratoryController::class, 'getSlots']);
+            });
+        });
     });
 
     /*
     |--------------------------------------------------------------------------
-    | Lab Manager Routes
+    | Lab Manager Specific Routes
     |--------------------------------------------------------------------------
     */
-    Route::middleware(['role:lab_manager','auth:sanctum'])->group(function () {
+    Route::middleware('role:lab_manager')->group(function () {
         Route::post('/lab-assistants', [LabManagerController::class, 'createAssistant']);
         Route::post('/receptionists', [LabManagerController::class, 'createReceptionist']);
-    });
-
-
-    Route::middleware(['auth:sanctum', 'role:admin'])->group(function () {
-        Route::post('/admin/register-lab', [AdminController::class, 'registerLabWithManager']);
-    });
-    
-
-    // Route::middleware(['auth:sanctum', 'role:admin'])->group(function () {
-    //     Route::apiResource('admin/categories', CategoryController::class);
-    // });
-
-    
-    // Route::get('categories', [CategoryController::class, 'index']);
-    // Route::get('categories/{id}', [CategoryController::class, 'show']);
-
-
-    Route::middleware(['auth:sanctum', 'role:admin'])->group(function () {
-        Route::apiResource('admin/master-tests', MasterTestController::class);
-    });
-
-    Route::middleware(['auth:sanctum'])->group(function(){
-        Route::get('get-test-category/{id}',[MasterTestController::class,'getByCategory']);
-    });
-
-    
-
-    
-
-    Route::middleware(['auth:sanctum','role:lab_manager'])->group(function () {
-       
         Route::get('lab/my-tests', [LabTestController::class, 'index']);
         Route::post('lab/add-test', [LabTestController::class, 'store']);
-    });
-
-    Route::middleware(['auth:sanctum', 'role:lab_manager'])->group(function () {
         Route::get('lab/schedule', [LabScheduleController::class, 'index']);
         Route::put('lab/schedule/{day_of_week}', [LabScheduleController::class, 'update']);
     });
 
+    /*
+    |--------------------------------------------------------------------------
+    | Receptionist Specific Routes
+    |--------------------------------------------------------------------------
+    */
+    Route::prefix('receptionist')->group(function () {
+        Route::get('/dashboard', [ReceptionistDashboardController::class, 'index']);
+        Route::get('/available-slots', [ReceptionistDashboardController::class, 'getSlots']);
+        Route::post('/book-appointment', [ReceptionistDashboardController::class, 'bookAppointment']);
+        Route::get('/search-patient', [ReceptionistDashboardController::class, 'searchPatient']);
+        Route::get('/appointments', [ReceptionistDashboardController::class, 'manageAppointments']);
+        Route::get('/patient-profile/{id}', [ReceptionistDashboardController::class, 'getPatientProfile']);
+        Route::patch('/invoices/{id}/toggle-payment', [ReceptionistDashboardController::class, 'togglePayment']);
+        Route::patch('/appointments/{id}/confirm-attendance', [ReceptionistDashboardController::class, 'confirmAttendance']);
+    });
 
-    Route::middleware('auth:sanctum')->group(function () {
-    
-        
-        Route::get('/lab-ratings', [LabRatingController::class, 'index']); 
+    /*
+    |--------------------------------------------------------------------------
+    | Lab Assistant Specific Routes
+    |--------------------------------------------------------------------------
+    */
+    Route::prefix('lab-assistant')->group(function () {
+        Route::get('/dashboard', [LabAssistantDashboardController::class, 'index']);
         
        
-        Route::post('/lab-ratings', [LabRatingController::class, 'store']);
+        Route::get('/today-appointments', [LabAssistantDashboardController::class, 'todayAppointments']);
         
-        
-        Route::get('/laboratories/{id}/ratings', [LabRatingController::class, 'getLabRatings']);
+        Route::post('/appointments/{appointment}/start', [LabAssistantDashboardController::class, 'start']);
+        Route::get('/results/search', [LabAssistantLabResultController::class, 'search']);
+        Route::post('/appointments/{appointment}/results', [LabAssistantLabResultController::class, 'store']);
+        // جلب قائمة تقارير الجدول الرئيسي مع الفلاتر والبحث
+        Route::get('/results', [LabAssistantLabResultController::class, 'index']); 
     });
 
-    Route::middleware('auth:sanctum')->group(function () {
-    
-        Route::get('/tests/{testId}/search', [MasterTestController::class, 'searchTest']);
-        Route::get('/laboratories/{labId}/slots', [LaboratoryController::class, 'getSlots']);
-
-    });
-
-
-
-    
-
-
-    // مجموعة روابط مدير المنصة (Platform Admin)
-    Route::prefix('admin')->group(function () {
-
-        // 1. الإحصائيات والرسوم البيانية (الكروت العلوية)
-        Route::get('/statistics', [AdminDashboardController::class, 'getStatistics']);
-
-        // 2. قائمة المخابر (الجدول اللي تحت)
-        Route::get('/labs', [AdminDashboardController::class, 'getLabsList']);
-
-        // 3. إدارة المخابر (الإجراءات - Actions)
-        Route::prefix('labs')->group(function () {
-            
-            // إضافة مخبر جديد (الزر الأزرق)
-            Route::post('/', [LaboratoryController::class, 'store']);
-            
-            // عرض تفاصيل مخبر محدد (أيقونة العين)
-            Route::get('/{id}', [LaboratoryController::class, 'show']);
-            
-            // قبول مخبر (زر قبول)
-            Route::put('/{id}/approve', [LaboratoryController::class, 'approve']);
-            
-            // رفض مخبر (زر رفض)
-            Route::put('/{id}/reject', [LaboratoryController::class, 'reject']);
-            
-            // حظر مخبر (أيقونة المنع الحمراء)
-            Route::put('/{id}/block', [LaboratoryController::class, 'block']);
-            
-            // جلب الفترات الزمنية المتاحة لمخبر (للمريض أو الإدارة)
-            Route::get('/{id}/slots', [LaboratoryController::class, 'getSlots']);
-        });
-
-    });
-
-
-    Route::group(['prefix' => 'admin', 'middleware' => ['auth:sanctum', 'role:admin']], function () {
-        Route::get('/users', [AdminUserController::class, 'index']);
-        Route::post('/users/{id}/reset-password', [AdminUserController::class, 'resetPassword']);
-        Route::put('/users/{id}/status', [AdminUserController::class, 'updateStatus']);
-    });
-
-
-    Route::group(['prefix' => 'admin', 'middleware' => ['auth:sanctum', 'role:admin']], function () {
-    
-      
-        Route::get('/payments', [PaymentController::class, 'index']);
-
-        
-        Route::get('/analytics', [AnalyticsController::class, 'index']);
-
-        
-        Route::get('settings/', [AdminSettingsController::class, 'index']);
-        Route::post('settings/update', [AdminSettingsController::class, 'update']);
-        
-        Route::post('/payments/send-reminders', [PaymentController::class, 'sendReminders']);
-        Route::post('/payments/{id}/confirm', [PaymentController::class, 'markAsPaid']);
-        
-    });
-
-
-    Route::middleware('auth:sanctum')->group(function () {
-        Route::get('/receptionist/dashboard', [ReceptionistDashboardController::class, 'index']);
-        Route::patch('/receptionist/invoices/{id}/toggle-payment', [ReceptionistDashboardController::class, 'togglePayment']);
-
-        Route::get('/reception/available-slots', [ReceptionistDashboardController::class, 'getSlots']);
-        Route::post('/reception/book-appointment', [ReceptionistDashboardController::class, 'bookAppointment']);
-        Route::get('/reception/search-patient', [ReceptionistDashboardController::class, 'searchPatient']);
-        Route::get('/reception/appointments', [ReceptionistDashboardController::class, 'manageAppointments']);
-        Route::get('/reception/patient-profile/{id}', [ReceptionistDashboardController::class, 'getPatientProfile']);
-        Route::patch('/reception/appointments/{id}/confirm-attendance', [ReceptionistDashboardController::class, 'confirmAttendance']);
-    });
-
-
-});
-
-
-
+}); 

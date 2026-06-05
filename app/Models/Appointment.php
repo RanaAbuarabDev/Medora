@@ -16,7 +16,8 @@ class Appointment extends Model
         'start_time',
         'end_time',
         'status',
-        'cancel_reason'
+        'cancel_reason',
+        'sample_code'
 
         
     ];
@@ -31,6 +32,14 @@ class Appointment extends Model
         return $this->belongsTo(User::class, 'user_id');
     }
 
+
+
+    public function labTests()
+    {
+        return $this->belongsToMany(LabTest::class, 'appointment_lab_test', 'appointment_id', 'lab_test_id')
+                    ->withPivot('id', 'result_value', 'status')
+                    ->withTimestamps();
+    }
  
     public function test()
     {
@@ -66,13 +75,18 @@ class Appointment extends Model
         return $this->hasOne(Invoice::class);
     }
 
-    
-    public function labTests()
-    {
-        
-        return $this->belongsToMany(LabTest::class, 'appointment_lab_test', 'appointment_id', 'lab_test_id')
-                    ->withTimestamps(); 
-    }
 
     
+
+    // 2. جلب جميع النتائج الرقمية التي أدخلها المساعد لهذا الموعد (One-to-Many)
+    public function sampleResults()
+    {
+        return $this->hasMany(SampleResult::class, 'appointment_id');
+    }
+
+    // 3. علاقة الموعد بملف المريض (BelongsTo)
+    public function patientProfile()
+    {
+        return $this->belongsTo(PatientProfile::class, 'patient_profile_id'); // تأكدي من اسم الفورين كي لديكِ
+    }
 }

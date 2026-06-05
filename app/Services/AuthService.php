@@ -135,4 +135,32 @@ class AuthService
 
         return $licenseNumber;
     }
+
+
+
+    public function deleteLaboratory(int $labId)
+    {
+        // 1. التحقق من وجود المخبر أولاً
+        $lab = Laboratory::find($labId);
+        if (!$lab) {
+            throw new \Exception('المخبر المطلوب غير موجود بالنظام.');
+        }
+
+        DB::beginTransaction();
+        try {
+            // 2. حذف أو تعطيل كافة المستخدمين (المدير والمساعدين) المرتبطين بهذا المخبر
+            // يمكنكِ استخدام delete() للحذف النهائي، أو حظرهم حسب سياسة التخرج
+            User::where('lab_id', $labId)->delete();
+
+            // 3. حذف المخبر نفسه
+            $lab->delete();
+
+            DB::commit();
+            return true;
+
+        } catch (\Exception $e) {
+            DB::rollBack();
+            throw new \Exception('حدث خطأ أثناء إزالة السجلات من قاعدة البيانات: ' . $e->getMessage());
+        }
+    }
 }

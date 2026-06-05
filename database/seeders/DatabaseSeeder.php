@@ -45,7 +45,7 @@ class DatabaseSeeder extends Seeder
         $manager = User::create([
             'name' => 'د. أحمد العلي (مدير المخبر)',
             'email' => 'manager@medora.com',
-            'password' => Hash::make('password'),
+            'password' => Hash::make('password1234@@'),
             'status' => 'active',
             'lab_id' => $lab->id // ⚡ الحقل القديم لضمان عمل أكوادك السابقة
         ]);
@@ -84,7 +84,7 @@ class DatabaseSeeder extends Seeder
         $assistant = User::create([
             'name' => 'الأستاذ فادي (المساعد المخبري)',
             'email' => 'assistant@medora.com',
-            'password' => Hash::make('password'),
+            'password' => Hash::make('password1234@@'),
             'status' => 'active',
             'lab_id' => $lab->id // ⚡ الحقل القديم لضمان عمل أكوادك السابقة
         ]);
@@ -103,7 +103,7 @@ class DatabaseSeeder extends Seeder
             'name' => 'خالد العتيبي',
             'email' => 'khaled@medora.com',
             'phone' => '0533333333', // 
-            'password' => Hash::make('password'),
+            'password' => Hash::make('password1234@@'),
             'status' => 'active',
             'lab_id' => $lab->id
         ]);
