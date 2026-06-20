@@ -61,7 +61,6 @@ class PatientProfileService
             $user->avatar = $data['avatar']->store('avatars', 'public');
         }
 
-        // جـ) تحديث بيانات جدول المستخدمين الأساسي بشكل آمن (👈 التعديل هنا)
         $user->name = $data['name'] ?? $user->name;
         $user->email = $data['email'] ?? $user->email; // إذا لم يرسل الإيميل، يحتفظ بالقديم دون أخطاء
         

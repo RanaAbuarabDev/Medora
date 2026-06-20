@@ -129,5 +129,38 @@ class DatabaseSeeder extends Seeder
             'address' => 'حي النخيل، الرياض، المملكة العربية السعودية',
             'medical_notes' => 'مريض سكري,يعاني من سيولة دم,فوبيا من الإبر'
         ]);
+
+
+
+        
+        /*
+        |--------------------------------------------------------------------------
+        | 🧪 شحن تحاليل المختبر الافتراضية (Lab Tests Seeder)
+        |--------------------------------------------------------------------------
+        */
+
+        // جلب أول 10 تحاليل قياسية
+        $masterTests = \App\Models\MasterTest::select('id')->take(10)->get();
+
+        if ($masterTests->isNotEmpty() && isset($lab)) {
+            $labTestsData = [];
+            $now = now();
+
+            // أسعار تشغيلية افتراضية بالليرة السورية
+            $prices = [15000, 25000, 30000, 12000, 45000, 20000, 35000, 60000, 18000, 55000];
+
+            foreach ($masterTests as $index => $masterTest) {
+                $labTestsData[] = [
+                    'lab_id'         => $lab->id, // ⚡ تم التأكيد الحاسم: الاسم هنا lab_id حصراً ومطابق للجدول
+                    'master_test_id' => $masterTest->id,
+                    'price'          => $prices[$index] ?? 25000,
+                    'created_at'     => $now,
+                    'updated_at'     => $now,
+                ];
+            }
+
+            // حقن البيانات في قاعدة البيانات مباشرة مع تجاهل التكرار
+            \Illuminate\Support\Facades\DB::table('lab_tests')->insertOrIgnore($labTestsData);
+        }
     }
 }

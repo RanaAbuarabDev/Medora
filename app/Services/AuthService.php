@@ -1,6 +1,5 @@
 <?php
 
-
 namespace App\Services;
 
 use App\Models\Laboratory;
@@ -20,20 +19,26 @@ class AuthService
 
     public function login(array $credentials)
     {
-        
         $user = User::where('email', $credentials['email'])->first();
 
         if (!$user || !Hash::check($credentials['password'], $user->password)) {
-            throw new \Exception('Invalid credentials', 401);
+            throw new \Exception('بيانات الاعتماد المدخلة غير صحيحة', 401);
+        }
+
+        // ⚡ منع المستخدم المحظور من تسجيل الدخول وإرجاع استثناء مخصص
+        if ($user->is_blocked) {
+            throw new \Exception('تم حظر هذا الحساب من قبل إدارة المختبر.', 403);
         }
 
         return [
             'token' => $user->createToken('api-token')->plainTextToken,
             'user'  => [
-                'id'    => $user->id,
-                'name'  => $user->name,
-                'email' => $user->email,
-                'roles' => $user->getRoleNames(), 
+                'id'     => $user->id,
+                'name'   => $user->name,
+                'email'  => $user->email,
+                'lab_id' => $user->lab_id,
+                // ⚡ تأكيد جلب الأدوار كـ Array (مثال: ["lab_manager"] أو ["receptionist"])
+                'roles'  => $user->getRoleNames(), 
             ],
         ];
     }
@@ -44,7 +49,6 @@ class AuthService
             'name' => $data['name'],
             'email' => $data['email'],
             'password' => bcrypt($data['password']),
-            
             'email_verified_at' => null
         ]);
 
@@ -56,8 +60,6 @@ class AuthService
     public function setupNewLab(array $data)
     {
         return DB::transaction(function () use ($data) {
-            
-            
             $licenseNumber = $this->generateLicenseNumber();
 
             $lab = Laboratory::create([
@@ -83,11 +85,9 @@ class AuthService
         });
     }
 
-
     public function addLabAssistant(array $data): array
     {
         return DB::transaction(function () use ($data) {
-
             $user = User::create([
                 'name'     => $data['name'],
                 'email'    => $data['email'],
@@ -107,7 +107,6 @@ class AuthService
     public function addReceptionist(array $data): array
     {
         return DB::transaction(function () use ($data) {
-
             $user = User::create([
                 'name'     => $data['name'],
                 'email'    => $data['email'],
@@ -127,20 +126,14 @@ class AuthService
     private function generateLicenseNumber(): string
     {
         do {
-            
             $licenseNumber = 'LAB-' . rand(1000, 9999);
-            
-            
         } while (Laboratory::where('license_number', $licenseNumber)->exists());
 
         return $licenseNumber;
     }
 
-
-
     public function deleteLaboratory(int $labId)
     {
-        // 1. التحقق من وجود المخبر أولاً
         $lab = Laboratory::find($labId);
         if (!$lab) {
             throw new \Exception('المخبر المطلوب غير موجود بالنظام.');
@@ -148,11 +141,7 @@ class AuthService
 
         DB::beginTransaction();
         try {
-            // 2. حذف أو تعطيل كافة المستخدمين (المدير والمساعدين) المرتبطين بهذا المخبر
-            // يمكنكِ استخدام delete() للحذف النهائي، أو حظرهم حسب سياسة التخرج
             User::where('lab_id', $labId)->delete();
-
-            // 3. حذف المخبر نفسه
             $lab->delete();
 
             DB::commit();

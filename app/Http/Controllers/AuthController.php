@@ -30,23 +30,26 @@ class AuthController extends Controller
     }
 
     /**
-     * تسجيل الدخول
+     * تسجيل الدخول وإرجاع الأدوار والمعلومات كاملة
      */
     public function login(LoginRequest $request)
     {
         try {
             $data = $this->authService->login($request->validated());
 
+            // ⚡ هنا التعديل الجوهري: نمرر مصفوفة $data['user'] كاملة وبداخلها الـ roles تلقائياً
             return ApiResponseService::success([
-                'user' => $data['user'],
+                'user' => $data['user'], 
                 'authorisation' => [
                     'token' => $data['token'],
                     'type'  => 'bearer'
                 ]
-            ], "Login Successful", 200);
+            ], "تم تسجيل الدخول بنجاح", 200);
 
         } catch (\Exception $e) {
-            return ApiResponseService::error($e->getMessage(), 401);
+            // التقاط رمز الخطأ إذا كان حساب محظور (403) أو خطأ بيانات (401)
+            $statusCode = $e->getCode() == 403 ? 403 : 401;
+            return ApiResponseService::error([$e->getMessage()], 'فشل تسجيل الدخول', $statusCode);
         }
     }
 
@@ -95,7 +98,6 @@ class AuthController extends Controller
             return ApiResponseService::error('هذا الحساب غير موجود لدينا، يرجى التأكد من البريد الإلكتروني.', 404);
         }
 
-        // إذا الإيميل موجود، منكمل الإرسال
         $this->otpService->send($request->email, 'password_reset');
 
         return ApiResponseService::success(null, 'تم إرسال رمز التحقق إلى بريدك الإلكتروني.');
@@ -113,13 +115,11 @@ class AuthController extends Controller
 
         $email = $request->email;
 
-        // حماية من التخمين
         if ($this->attemptService->isLocked($email)) {
             $minutes = ceil($this->attemptService->remainingTime($email) / 60);
             return ApiResponseService::error("تم حظرك مؤقتاً. حاول بعد {$minutes} دقيقة.", 429);
         }
 
-        // التحقق من الرمز
         if (!$this->otpService->verify($email, $request->otp, 'password_reset')) {
             $this->attemptService->increment($email);
             
@@ -148,14 +148,12 @@ class AuthController extends Controller
 
         $user = User::where('email', $request->email)->first();
 
-        // تحديث كلمة المرور وحذف التوكنات القديمة للأمان
         $user->update([
             'password' => Hash::make($request->password)
         ]);
         
         $user->tokens()->delete();
 
-        // تسجيل دخول فوري
         $token = $user->createToken('auth_token')->plainTextToken;
 
         return ApiResponseService::success([
@@ -170,6 +168,6 @@ class AuthController extends Controller
     public function logout(Request $request)
     {
         $request->user()->currentAccessToken()->delete();
-        return response()->json(['message' => 'Logged out']);
+        return ApiResponseService::success(null, 'تم تسجيل الخروج بنجاح');
     }
 }

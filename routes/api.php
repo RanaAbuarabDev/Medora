@@ -13,7 +13,6 @@ use App\Http\Controllers\CategoryController;
 use App\Http\Controllers\LabManagerController;
 use App\Http\Controllers\LaboratoryController;
 use App\Http\Controllers\LabRatingController;
-use App\Http\Controllers\LabScheduleController;
 use App\Http\Controllers\LabTestController;
 use App\Http\Controllers\AdminDashboardController;
 use App\Http\Controllers\Patient\PatientProfileController;
@@ -21,6 +20,14 @@ use App\Http\Controllers\Patient\PatientNotificationController;
 use App\Http\Controllers\Reception\ReceptionistDashboardController;
 use App\Http\Controllers\LabAssistant\LabAssistantDashboardController;
 use App\Http\Controllers\LabAssistant\LabResultController as LabAssistantLabResultController;
+use App\Http\Controllers\LabManager\DashboardController;
+use App\Http\Controllers\LabManager\LabPatientController;
+use App\Http\Controllers\LabManager\LabPatientProfileController;
+use App\Http\Controllers\LabManager\LabResultController;
+use App\Http\Controllers\LabManager\LabScheduleController;
+use App\Http\Controllers\LabManager\LabStaffController;
+use App\Http\Controllers\LabManager\OperationController;
+
 
 /*
 |--------------------------------------------------------------------------
@@ -76,10 +83,16 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::get('/laboratories/{id}/ratings', [LabRatingController::class, 'getLabRatings']);
 
     // Laboratories Core Search & Slots
+    // البحث المتعدد عن باقة تحاليل معاً
+    Route::get('/tests/search-multiple', [MasterTestController::class, 'searchMultipleTests']);
     Route::get('/tests/{testId}/search', [MasterTestController::class, 'searchTest']);
     Route::get('/laboratories/{labId}/slots', [LaboratoryController::class, 'getSlots']);
     Route::get('get-test-category/{id}', [MasterTestController::class, 'getByCategory']);
 
+
+
+
+    Route::apiResource('admin/master-tests', MasterTestController::class);
     /*
     |--------------------------------------------------------------------------
     | Platform Admin Specific Routes
@@ -88,7 +101,7 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::middleware('role:admin')->group(function () {
         Route::post('/lab-managers', [AdminAdminController::class, 'createLabManager']);
         Route::post('/admin/register-lab', [AdminAdminController::class, 'registerLabWithManager']);
-        Route::apiResource('admin/master-tests', MasterTestController::class);
+       // Route::apiResource('admin/master-tests', MasterTestController::class);
         
         Route::prefix('admin')->group(function () {
             Route::get('/statistics', [AdminDashboardController::class, 'getStatistics']);
@@ -128,6 +141,21 @@ Route::middleware('auth:sanctum')->group(function () {
         Route::post('lab/add-test', [LabTestController::class, 'store']);
         Route::get('lab/schedule', [LabScheduleController::class, 'index']);
         Route::put('lab/schedule/{day_of_week}', [LabScheduleController::class, 'update']);
+        Route::get('/dashboard/stats', [DashboardController::class,'index']);
+        Route::get('/operations', [OperationController::class, 'index']);
+        Route::get('/lab/available-master-tests', [LabTestController::class, 'getAvailableMasterTests']);
+        Route::get('/lab/results-dashboard', [LabResultController::class, 'index']);
+        Route::get('/lab/patients', [LabPatientController::class, 'index']);
+        Route::get('/lab/patients/{id}', [LabPatientProfileController::class, 'show']);
+        Route::get('/lab/staff', [LabStaffController::class, 'index']);
+
+        Route::prefix('lab/staff')->group(function () {
+            Route::get('/', [LabStaffController::class, 'index']);               
+            Route::get('/{id}', [LabStaffController::class, 'show']);            
+            Route::put('/{id}', [LabStaffController::class, 'update']);          
+            Route::patch('/{id}/toggle-block', [LabStaffController::class, 'toggleBlock']); 
+            Route::post('/', [LabStaffController::class, 'store']); 
+        });
     });
 
     /*
@@ -164,4 +192,6 @@ Route::middleware('auth:sanctum')->group(function () {
         Route::get('/results', [LabAssistantLabResultController::class, 'index']); 
     });
 
+
+    
 }); 

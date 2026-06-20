@@ -14,6 +14,8 @@ class Invoice extends Model
         'total_amount',
         'amount_paid',
         'payment_status',
+        'lab_id',
+        'patient_id',
     ];
 
     

@@ -33,10 +33,40 @@ use Illuminate\Database\Eloquent\Model;
  */
 class Laboratory extends Model
 {
-    protected $fillable = ['name','address','logo','phone','slot_interval','status','license_number'];
+    protected $fillable = [
+        'name', 
+        'address', 
+        'logo', 
+        'phone', 
+        'slot_interval', 
+        'status', 
+        'license_number'
+    ];
 
+    protected static function booted(): void
+    {
+        static::created(function (Laboratory $laboratory) {
+            
+            $schedules = [];
+            $now = now();
 
-    // العلاقة العامة (كل من يتبع للمخبر)
+           
+            for ($i = 0; $i < 7; $i++) {
+                $schedules[] = [
+                    'lab_id'      => $laboratory->id,
+                    'day_of_week' => $i, 
+                    'start_time'  => '08:00:00',
+                    'end_time'    => '16:00:00',
+                    'is_day_off'  => ($i == 5) ? true : false,
+                    'created_at'  => $now,
+                    'updated_at'  => $now,
+                ];
+            }
+
+            \App\Models\LabSchedule::insert($schedules);
+        });
+    }
+    
     public function users()
     {
         return $this->hasMany(User::class, 'lab_id');
@@ -53,12 +83,12 @@ class Laboratory extends Model
     }
 
 
-    public function masterTests()
-    {
-        return $this->belongsToMany(MasterTest::class, 'lab_tests', 'lab_id', 'master_test_id')
-                    ->withPivot('price', 'is_available')
-                    ->withTimestamps();
-    }
+    // public function masterTests()
+    // {
+    //     return $this->belongsToMany(MasterTest::class, 'lab_tests', 'lab_id', 'master_test_id')
+    //                 ->withPivot('price', 'is_available')
+    //                 ->withTimestamps();
+    // }
 
 
     public function ratings() {
@@ -90,6 +120,13 @@ class Laboratory extends Model
     public function patients() {
         return $this->belongsToMany(User::class, 'laboratory_patient')
                     ->withPivot('internal_patient_number')
+                    ->withTimestamps();
+    }
+
+    public function masterTests()
+    {
+        return $this->belongsToMany(MasterTest::class, 'lab_tests', 'lab_id', 'master_test_id')
+                    ->withPivot('price', 'estimated_time_hours')
                     ->withTimestamps();
     }
 
