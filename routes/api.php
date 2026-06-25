@@ -21,13 +21,15 @@ use App\Http\Controllers\Reception\ReceptionistDashboardController;
 use App\Http\Controllers\LabAssistant\LabAssistantDashboardController;
 use App\Http\Controllers\LabAssistant\LabResultController as LabAssistantLabResultController;
 use App\Http\Controllers\LabManager\DashboardController;
+use App\Http\Controllers\LabManager\InvoiceController;
+use App\Http\Controllers\LabManager\LabInventoryController;
 use App\Http\Controllers\LabManager\LabPatientController;
 use App\Http\Controllers\LabManager\LabPatientProfileController;
 use App\Http\Controllers\LabManager\LabResultController;
 use App\Http\Controllers\LabManager\LabScheduleController;
 use App\Http\Controllers\LabManager\LabStaffController;
 use App\Http\Controllers\LabManager\OperationController;
-
+use App\Http\Controllers\LabManager\ReportController;
 
 /*
 |--------------------------------------------------------------------------
@@ -148,6 +150,10 @@ Route::middleware('auth:sanctum')->group(function () {
         Route::get('/lab/patients', [LabPatientController::class, 'index']);
         Route::get('/lab/patients/{id}', [LabPatientProfileController::class, 'show']);
         Route::get('/lab/staff', [LabStaffController::class, 'index']);
+        Route::get('invoices', [InvoiceController::class, 'index']);
+        Route::get('reports', [ReportController::class, 'index']);
+        Route::apiResource('inventory', LabInventoryController::class);
+
 
         Route::prefix('lab/staff')->group(function () {
             Route::get('/', [LabStaffController::class, 'index']);               

@@ -80,7 +80,7 @@ class AnalyticsService
         return DB::table('appointment_lab_test')
             ->join('appointments', 'appointment_lab_test.appointment_id', '=', 'appointments.id')
             ->join('lab_tests', 'appointment_lab_test.lab_test_id', '=', 'lab_tests.id')
-            ->join('master_tests', 'lab_tests.master_test_id', '=', 'master_tests.id') // الانتقال للتحليل الرئيسي لضم الاسم
+            ->join('master_tests', 'lab_tests.master_test_id', '=', 'master_tests.id') 
             ->select('master_tests.name', DB::raw('COUNT(*) as total'))
             ->whereIn('appointments.status', ['confirmed', 'completed']) 
             ->groupBy('lab_tests.master_test_id', 'master_tests.name')

@@ -16,20 +16,11 @@ return new class extends Migration
             
             
             $table->foreignId('appointment_id')->unique()->constrained('appointments')->onDelete('cascade');
-            
-           
             $table->foreignId('lab_id')->index()->constrained('laboratories')->onDelete('cascade');
-            
-            
             $table->foreignId('patient_id')->index()->constrained('users')->onDelete('cascade');
-            
-          
             $table->decimal('total_amount', 12, 2); 
             $table->decimal('amount_paid', 12, 2)->default(0.00); 
-            
-          
             $table->enum('payment_status', ['paid', 'unpaid'])->default('unpaid')->index(); 
-            
             $table->timestamps();
         });
     }
