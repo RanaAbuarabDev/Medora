@@ -19,6 +19,7 @@ use App\Http\Controllers\Patient\PatientProfileController;
 use App\Http\Controllers\Patient\PatientNotificationController;
 use App\Http\Controllers\Reception\ReceptionistDashboardController;
 use App\Http\Controllers\LabAssistant\LabAssistantDashboardController;
+use App\Http\Controllers\LabAssistant\LabInventoryUsageController;
 use App\Http\Controllers\LabAssistant\LabResultController as LabAssistantLabResultController;
 use App\Http\Controllers\LabManager\DashboardController;
 use App\Http\Controllers\LabManager\InvoiceController;
@@ -169,7 +170,7 @@ Route::middleware('auth:sanctum')->group(function () {
     | Receptionist Specific Routes
     |--------------------------------------------------------------------------
     */
-    Route::prefix('receptionist')->group(function () {
+    Route::prefix('reception')->group(function () {
         Route::get('/dashboard', [ReceptionistDashboardController::class, 'index']);
         Route::get('/available-slots', [ReceptionistDashboardController::class, 'getSlots']);
         Route::post('/book-appointment', [ReceptionistDashboardController::class, 'bookAppointment']);
@@ -196,6 +197,8 @@ Route::middleware('auth:sanctum')->group(function () {
         Route::post('/appointments/{appointment}/results', [LabAssistantLabResultController::class, 'store']);
         // جلب قائمة تقارير الجدول الرئيسي مع الفلاتر والبحث
         Route::get('/results', [LabAssistantLabResultController::class, 'index']); 
+        Route::get('inventory-cards', [LabInventoryUsageController::class, 'getCards']);
+        Route::post('appointments/{appointmentId}/consume', [LabInventoryUsageController::class, 'submitUsage']);
     });
 
 

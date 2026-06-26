@@ -4,7 +4,7 @@ namespace Database\Seeders;
 
 use App\Models\User;
 use App\Models\Laboratory;
-use App\Models\PatientProfile;
+//use App\Models\PatientProfile;
 use App\Models\EmployeeProfile;
 use Illuminate\Database\Seeder;
 use Illuminate\Support\Facades\Hash;

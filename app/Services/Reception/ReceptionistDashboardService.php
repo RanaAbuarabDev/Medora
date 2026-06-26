@@ -12,7 +12,6 @@ use App\Models\User;
 use Illuminate\Support\Facades\DB;
 use Carbon\Carbon;
 use Illuminate\Support\Facades\Hash;
-use Request;
 
 class ReceptionistDashboardService
 {
@@ -23,44 +22,40 @@ class ReceptionistDashboardService
     {
         $today = Carbon::today()->format('Y-m-d');
 
-        // 1. حساب الكروت العلوية (KPIs) لتطابق الأرقام الظاهرة في الـ UI تماماً
+        // 1. حساب الكروت العلوية (KPIs)
         $cards = [
-            // قائمة الانتظار: المرضى المتواجدين حالياً في المختبر بانتظار سحب العينة
             'waiting_list_count' => Appointment::where('lab_id', $labId)
                                         ->whereDate('appointment_date', $today)
-                                        ->where('status', 'confirmed') // أو الحالة الخاصة بـ "بانتظار السحب" عندكِ
+                                        ->where('status', 'confirmed') 
                                         ->count(),
                                         
-            // المواعيد المتبقية: المواعيد القادمة اليوم التي لم تبدأ أو ما زالت معلقة
             'upcoming_appointments' => Appointment::where('lab_id', $labId)
                                         ->whereDate('appointment_date', $today)
                                         ->where('status', 'pending')
                                         ->count(),
                                         
-            // الفواتير المعلقة: الفواتير غير المدفوعة التابعة لمواعيد اليوم (تطابق كارت 3 فواتير معلقة)
             'pending_invoices_count' => Invoice::whereHas('appointment', function($q) use ($labId, $today) {
                                             $q->where('lab_id', $labId)->whereDate('appointment_date', $today);
                                         })->where('payment_status', 'unpaid')->count(),
                                         
-            // نتائج جاهزة: التحاليل التي اكتملت نتائجها اليوم تماماً (تطابق كارت 8 نتائج جاهزة)
             'completed_results_count' => Appointment::where('lab_id', $labId)
                                         ->whereDate('appointment_date', $today)
                                         ->where('status', 'completed')
                                         ->count(),
         ];
 
-        // 2. جلب المواعيد القادمة لليوم مع العلاقات (وتأكدي من شحن الـ invoice_id للـ Toggle Switch)
+        // 2. جلب المواعيد القادمة لليوم مع العلاقات الصحيحة هندسياً ⚡
         $appointments = Appointment::where('lab_id', $labId)
             ->whereDate('appointment_date', $today)
             ->with([
                 'patient:id,name', 
-                'labTests:id,name', // إذا لم يكن هناك حقل code في جدول التحاليل نكتفي بالـ name
+                'labTests.masterTest', // 👈 التعديل الجوهري هنا: شحن الـ masterTest بدلاً من طلب حقل name غير الموجود
                 'invoice:id,appointment_id,total_amount,payment_status'
             ])
             ->orderBy('start_time', 'asc') 
             ->get();
 
-        // 3. جلب التنبيهات العاجلة الحية من جدول التنبيهات
+        // 3. جلب التنبيهات العاجلة الحية
         $urgentAlerts = DB::table('notifications')
             ->whereNull('read_at')
             ->latest()
@@ -106,22 +101,17 @@ class ReceptionistDashboardService
     }
 
     /**
-     * التبديل السريع لحالة الدفع (Toggle Payment) من الجدول مباشرة
+     * التبديل السريع لحالة الدفع (Toggle Payment)
      */
     public function togglePaymentStatus(int $invoiceId): Invoice
     {
         $invoice = Invoice::findOrFail($invoiceId);
-        
         $invoice->payment_status = $invoice->payment_status === 'paid' ? 'unpaid' : 'paid';
-        
-        // تحديث الكاش المدفوع فورا ليتطابق مع الـ محاسبة
         $invoice->amount_paid = $invoice->payment_status === 'paid' ? $invoice->total_amount : 0;
-        
         $invoice->save();
 
         return $invoice;
     }
-
 
     public function searchPatients(string $query)
     {
@@ -130,19 +120,20 @@ class ReceptionistDashboardService
                 $q->where('name', 'LIKE', "%{$query}%")
                 ->orWhere('phone', 'LIKE', "%{$query}%");
             })
-            ->select('id', 'name', 'phone', 'email') // نرجع فقط البيانات التي تحتاجها واجهة السيرش للتوفير
-            ->take(10) // نكتفي بأول 10 نتائج لتسريع الأداء
+            ->select('id', 'name', 'phone', 'email') 
+            ->take(10) 
             ->get();
     }
 
-
+    /**
+     * حجز موعد جديد لمريض
+     */
     public function storeAppointment(array $data, int $labId)
     {
         return DB::transaction(function () use ($data, $labId) {
             
             $patientId = $data['patient_id'] ?? null;
 
-            // 🛑 الحالة الأولى: مريض جديد كلياً
             if (!$patientId) {
                 $user = User::create([
                     'name'     => $data['patient_name'],
@@ -154,13 +145,12 @@ class ReceptionistDashboardService
                 ]);
                 $user->assignRole('patient');
 
-                // ✨ تحديث: إضافة حقول الطوارئ والعنوان المأخوذة من الواجهة لمطابقة المودال تماماً
                 PatientProfile::create([
                     'user_id'          => $user->id,
                     'gender'           => $data['gender'],
                     'birth_date'       => $data['birth_date'],
-                    'emergency_phone'  => $data['emergency_phone'] ?? null, // رقم الطوارئ (قريب)
-                    'address'          => $data['address'] ?? null,         // عنوان المريض
+                    'emergency_phone'  => $data['emergency_phone'] ?? null,
+                    'address'          => $data['address'] ?? null,
                 ]);
 
                 $internalNumber = "LAB" . $labId . "-P-" . $user->id;
@@ -171,39 +161,47 @@ class ReceptionistDashboardService
                 $patientId = $user->id;
             }
 
-            // 🗓️ توليد كود موعد فريد ومميز ليظهر في شاشة النجاح (مثال: MED-88241)
             $appointmentCode = 'MED-' . rand(10000, 99999);
+
+            $lab = Laboratory::find($labId);
+            $interval = $lab->slot_interval ?? 15;
+
+            $startTime = Carbon::parse($data['start_time']);
+            $endTime = $startTime->copy()->addMinutes($interval)->format('H:i:s');
 
             $appointment = Appointment::create([
                 'lab_id'           => $labId,
-                'patient_id'       => $patientId,
+                'user_id'          => $patientId,
                 'appointment_date' => $data['appointment_date'],
                 'start_time'       => $data['start_time'],
+                'end_time'         => $endTime,
                 'status'           => 'confirmed', 
                 'is_fasting'       => $data['is_fasting'] ?? false,
-                'appointment_code' => $appointmentCode, // تأكدي من وجود هذا الحقل في جدول المواعيد بمشروعك
+                'appointment_code' => $appointmentCode,
             ]);
 
             if (!empty($data['test_ids'])) {
                 $appointment->labTests()->attach($data['test_ids']);
             }
 
-            // 💰 توليد الفاتورة المالية الملحقة تلقائياً
             $paymentStatus = isset($data['confirm_cash']) && $data['confirm_cash'] ? 'paid' : 'unpaid';
             
-            $invoice = Invoice::create([
+            Invoice::create([
                 'appointment_id' => $appointment->id,
                 'total_amount'   => $data['total_amount'],
                 'amount_paid'    => $paymentStatus === 'paid' ? $data['total_amount'] : 0,
                 'payment_status' => $paymentStatus,
+                'lab_id'         => $labId,
+                'patient_id'     => $patientId,
             ]);
 
-            // ✨ التعديل الهندسي الأهم لواجهة النجاح: 
-            // شحن الموعد بالعلاقات ليعود للفرونت إند ممتلئاً بكل تفاصيل الفاتورة وأسماء التحاليل المختارة للطباعة فوراً
-            return $appointment->load(['patient', 'invoice', 'labTests:id,name']);
+            return $appointment->load([
+                'patient', 
+                'invoice', 
+                'labTests.masterTest' 
+            ]);
         });
     }
-
 
     public function getAvailableSlots(int $labId, string $date)
     {
@@ -223,25 +221,22 @@ class ReceptionistDashboardService
         $end = Carbon::parse($date . ' ' . $schedule->end_time);
         $interval = $lab->slot_interval ?? 30; 
 
-        // ⚡ التعديل لمنع التعديل المباشر على كائن النهاية ولتوليد الفترات بنظافة
         $periods = \Carbon\CarbonPeriod::since($start)->minutes($interval)->until($end->copy()->subMinutes($interval));
 
-        // جلب المواعيد المحجوزة لليوم
         $appointmentsByTime = Appointment::where('lab_id', $labId)
                 ->where('appointment_date', $date)
-                ->where('status', Appointment::STATUS_CONFIRMED) // تأكدي أن هذا هو الثابت الصحيح لمواعيد الانتظار
+                ->where('status', Appointment::STATUS_CONFIRMED)
                 ->select('start_time', DB::raw('count(*) as count'))
                 ->groupBy('start_time')
                 ->pluck('count', 'start_time')
                 ->toArray();
 
         $slots = [];
-        $now = Carbon::now(); // ⚡ الوقت الحالي للمقارنة من أجل حماية الماضي
+        $now = Carbon::now();
 
         foreach ($periods as $period) {
             $time = $period->format('H:i:s');
             
-            // 🔒 حل الـ Bug: إذا كان التاريخ هو اليوم، والوقت المولد قد مضى في الساعات الحقيقية، نتخطاه فوراً ولا نعرضه للواجهة
             if ($date === $now->format('Y-m-d') && $period->lt($now)) {
                 continue;
             }
@@ -252,13 +247,12 @@ class ReceptionistDashboardService
                 'time' => $period->format('H:i'),
                 'full_time' => $time,
                 'is_available' => $bookedCount < $assistantsCount, 
-                'remaining_slots' => max(0, $assistantsCount - $bookedCount) // استخدام max لضمان عدم خروج أرقام سالبة تحت أي ظرف
+                'remaining_slots' => max(0, $assistantsCount - $bookedCount)
             ];
         }
 
-        return array_values($slots); // إعادة ترتيب المصفوفة بنظافة بعد الـ continue
+        return array_values($slots);
     }
-
 
     private function getLabAssistantsCount(int $labId): int
     {
@@ -269,28 +263,22 @@ class ReceptionistDashboardService
         return $count > 0 ? $count : 1;
     }
 
-
     public function getManageAppointments(int $labId, array $filters)
     {
-        
         $query = Appointment::where('lab_id', $labId)
             ->with(['patient', 'invoice', 'labTests'])
             ->latest('appointment_date')
             ->latest('start_time');       
 
-        
         if (!empty($filters['search'])) {
             $search = $filters['search'];
             
             $query->where(function ($q) use ($search) {
-                // البحث في بيانات المريض
-                // لارافيل هنا تبحث بربط علاقة المريض، وسنضمن استخدام الاسم الصحيح للعمود المشترك
                 $q->whereHas('patient', function ($pQ) use ($search) {
                     $pQ->where('name', 'LIKE', "%{$search}%")
                     ->orWhere('phone', 'LIKE', "%{$search}%");
                 });
 
-                // البحث برقم الفاتورة (id) فقط إذا كان النص المدخل يحتوي على أرقام
                 $cleanSearch = str_replace('#INV-', '', $search);
                 if (is_numeric($cleanSearch)) {
                     $q->orWhereHas('invoice', function ($iQ) use ($cleanSearch) {
@@ -304,46 +292,36 @@ class ReceptionistDashboardService
             $query->where('appointment_date', '>=', $filters['from_date']);
         }
 
-        
         if (!empty($filters['to_date'])) {
             $query->where('appointment_date', '<=', $filters['to_date']);
         }
 
-        
         if (!empty($filters['status']) && $filters['status'] !== 'all') {
             $query->where('status', $filters['status']);
         }
 
-        
         return $query->paginate($filters['per_page'] ?? 10);
     }
 
     public function getPatientMedicalProfile(int $patientId)
     {
-       
         return User::role('patient')
             ->with(['patientProfile', 'appointments.invoice', 'appointments.labTests'])
             ->findOrFail($patientId);
     }
 
-    /**
-     * تأكيد حضور المريض وتغيير حالة الموعد إلى "في الانتظار"
-     */
     public function confirmPatientAttendance(int $appointmentId)
     {
         $appointment = Appointment::findOrFail($appointmentId);
 
-        // التحقق من أن الحالة الحالية هي pending فقط لزيادة أمان النظام
         if ($appointment->status !== 'pending') {
             throw new \Exception('لا يمكن تأكيد حضور مريض تم استقباله أو إلغاء موعده مسبقاً.');
         }
 
-        // تحديث الحالة
         $appointment->update([
             'status' => 'waiting'
         ]);
 
         return $appointment;
     }
-
 }
