@@ -42,7 +42,7 @@ class MasterTest extends Model
         return $this->belongsTo(TestCategory::class, 'test_category_id');
     }
 
-
+   
     
     public function laboratories()
     {

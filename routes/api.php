@@ -59,7 +59,7 @@ Route::post('/logout', [AuthController::class, 'logout']);
 Route::middleware('auth:sanctum')->group(function () {
 
     // Auth Actions
-    
+    Route::get('/tests/search', [MasterTestController::class, 'searchMasterTest']);
     Route::post('/refresh', [AuthController::class, 'refresh']);
 
     // Global Appointments Actions

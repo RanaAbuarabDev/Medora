@@ -3,14 +3,26 @@
 namespace App\Http\Controllers;
 
 use App\Http\Controllers\Controller;
+use App\Http\Requests\Patient\SearchTestRequest;
 use App\Models\MasterTest;
 use App\Http\Requests\StoreMasterTestRequest;
 use App\Http\Requests\UpdateMasterTestRequest;
 use App\Services\ApiResponseService;
 use Illuminate\Http\Request;
+use App\Services\labService;
 
 class MasterTestController extends Controller
 {
+    protected labService $labService;
+    protected ApiResponseService $apiResponse;
+
+    
+    public function __construct(labService $masterTestService, ApiResponseService $apiResponse)
+    {
+        $this->labService = $masterTestService;
+        $this->apiResponse = $apiResponse;
+    }
+
     
     public function index()
     {
@@ -168,5 +180,20 @@ class MasterTestController extends Controller
         });
 
         return ApiResponseService::success($result, 'تم جلب المخابر المشتركة بنجاح.');
+    }
+
+
+    public function searchMasterTest(SearchTestRequest $request)
+    {
+        // سحب النص الممرر بأمان بعد الـ Validation
+        $searchTerm = $request->input('query'); 
+        
+        $results = $this->labService->searchTests($searchTerm);
+
+        if ($results->isEmpty()) {
+            return $this->apiResponse->success([], 'لم يتم العثور على أي تحاليل مطابقة للبحث.', 200);
+        }
+
+        return $this->apiResponse->success($results, 'تم جلب نتائج البحث بنجاح.');
     }
 }
