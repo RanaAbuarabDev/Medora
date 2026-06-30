@@ -42,4 +42,60 @@ class LabTest extends Model
     {
         return $this->belongsTo(Laboratory::class, 'lab_id');
     }
+
+    
+
+    public function categoryOffers()
+    {
+        return $this->hasMany(Offer::class, 'category_id', 'category_id')
+                    ->whereNull('lab_test_id'); // لضمان عدم التداخل
+    }
+
+
+    public function directOffers()
+    {
+        return $this->hasMany(Offer::class, 'lab_test_id');
+    }
+
+
+    public function getPriceDetailsAttribute()
+    {
+        $originalPrice = $this->price;
+        $discountPercentage = 0;
+        $hasOffer = false;
+        $offerName = null;
+
+        // 1. البحث عن عرض مباشر على التحليل نفسه نشط اليوم
+        $activeOffer = $this->directOffers()->activeToday()->first();
+
+        // 2. إذا لم يجد، يبحث عن عرض مطبق على فئة هذا التحليل (عبر الماستر تيست)
+        if (!$activeOffer && $this->masterTest) {
+            $categoryId = $this->masterTest->category_id; 
+            if ($categoryId) {
+                $activeOffer = Offer::where('category_id', $categoryId)
+                                    ->whereNull('lab_test_id')
+                                    ->activeToday()
+                                    ->where('lab_id', $this->lab_id)
+                                    ->first();
+            }
+        }
+
+        // 3. إذا وُجد العرض، نأخذ النسبة والاسم
+        if ($activeOffer) {
+            $discountPercentage = $activeOffer->discount_percentage;
+            $hasOffer = true;
+            $offerName = $activeOffer->name;
+        }
+
+        // الحسبة الرياضية البرمجية الدقيقة للسعر بعد الخصم
+        $finalPrice = $originalPrice - ($originalPrice * ($discountPercentage / 100));
+
+        return [
+            'original_price'      => (float) $originalPrice,
+            'final_price'         => (float) $finalPrice,
+            'has_offer'           => $hasOffer,
+            'offer_name'          => $offerName,
+            'discount_percentage' => (float) $discountPercentage
+        ];
+    }
 }

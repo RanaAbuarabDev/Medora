@@ -29,6 +29,7 @@ use App\Http\Controllers\LabManager\LabPatientProfileController;
 use App\Http\Controllers\LabManager\LabResultController;
 use App\Http\Controllers\LabManager\LabScheduleController;
 use App\Http\Controllers\LabManager\LabStaffController;
+use App\Http\Controllers\LabManager\OfferController;
 use App\Http\Controllers\LabManager\OperationController;
 use App\Http\Controllers\LabManager\ReportController;
 
@@ -65,7 +66,7 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::get('/appointments', [AppointmentController::class, 'index']);
     Route::get('/appointments/{id}', [AppointmentController::class, 'show']);
     Route::post('/appointments/{id}/cancel', [AppointmentController::class, 'cancel']);
-
+    Route::get('patient/labs/{labId}/active-offers', [OfferController::class, 'indexForPatient']);
     // Patient Specific Actions
     Route::middleware('role:patient')->group(function () {
         Route::post('/appointments', [AppointmentController::class, 'store']);
@@ -154,6 +155,10 @@ Route::middleware('auth:sanctum')->group(function () {
         Route::get('invoices', [InvoiceController::class, 'index']);
         Route::get('reports', [ReportController::class, 'index']);
         Route::apiResource('inventory', LabInventoryController::class);
+        Route::get('offers/', [OfferController::class, 'indexForAdmin']);
+        Route::post('offers/', [OfferController::class, 'store']);
+        Route::put('offers/{id}', [OfferController::class, 'update']);
+        Route::delete('offers/{id}', [OfferController::class, 'destroy']);
 
 
         Route::prefix('lab/staff')->group(function () {
